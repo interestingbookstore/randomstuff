@@ -29,14 +29,28 @@ resolution = (1920, 1080)
 d_background_color = (255, 255, 255, 255)
 
 with open(txt_name, 'r') as f:
-    instructions = f.read().split('\n\n')
+    instructions = f.read()
+
+while '\n\n\n' in instructions:  # Fix extra long empty line gaps
+    instructions = instructions.replace('\n\n\n', '\n\n')
+
+instructions = instructions.split('\n\n')
 
 for index, i in enumerate(instructions):  # Split the sections by line
     instructions[index] = i.split('\n')
 
+slides = None
+save = False
+
 first_stuff = False
 for i in instructions[0]:
     i = i.split('-')
+    if len(i) == 1:
+        if i[0].isdigit():
+            sl = int(i[0])
+            slides = sl
+        else:
+            save = i[0]
     if len(i) == 2:
         resolution = (int(i[0]), int(i[1]))
         first_stuff = True
@@ -109,22 +123,33 @@ def process_pos(offset_info, size=(0, 0)):
     return pos, anchor
 
 
-for slide_index, slide in enumerate(instructions):  # Actually iterate through and generate stuff
-    im = Image.new('RGBA', resolution, d_background_color)
-    for element in slide:
+for slide_index, slide in enumerate(instructions):  # Handle variables
+    for ei, element in enumerate(slide):
         parts = element.split('::')
-
-        extension = parts[0][-4:]
         if len(parts) == 1:
             parts = parts[0].replace(' ', '').split('=')
-            for s2i, slide2 in enumerate(instructions):
+            for s2i, slide2 in enumerate(instructions[slide_index:]):
                 for e2i, element2 in enumerate(slide2):
                     parts2 = element2.split('::')
                     le = len(parts2[0])
                     if len(parts2) == 2:
                         if parts[0] in instructions[s2i][e2i]:
                             instructions[s2i][e2i] = parts2[0] + '::' + parts2[1].replace(parts[0], parts[1])
-        elif extension == '.png' or extension == '.jpg':
+            instructions[slide_index].pop(ei)
+
+if slides is not None:
+    instructions = instructions[slides - 1:slides]
+
+ims = []
+for slide in instructions:  # Actually iterate through and generate stuff
+    if not slide:  # If the slide was just a lone newline
+        continue
+    im = Image.new('RGBA', resolution, d_background_color)
+    for element in slide:
+        parts = element.split('::')
+
+        extension = parts[0][-4:]
+        if extension == '.png' or extension == '.jpg':
             scale = 1
             pos = (0, 0)
             img = Image.open(parts[0])
@@ -176,4 +201,10 @@ for slide_index, slide in enumerate(instructions):  # Actually iterate through a
 
             d.multiline_text((pos[0], convert(pos[1])), '\n'.join(texts), anchor=anchor, font=fnt, fill=color)
 
+    ims.append(im)
     im.show()
+print(save)
+if save is not False:
+    for index, i in enumerate(ims, start=1):
+        print(f'{save}{index}.png')
+        i.save(f'{save}{index}.png')
