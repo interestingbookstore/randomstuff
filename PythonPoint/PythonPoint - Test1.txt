@@ -1,0 +1,9 @@
+3840-2160
+0-0-2
+2
+
+
+Hello, world!::AssistantB-120, t-40-40, 0-0-7, 50
+var = RobotoB-50
+
+This is an example txt document for this PythonPoint project. Note, you won't see the text above rendered due to the number at line three, which selects this slide.::var, 40-40, 0-0-7, 40
