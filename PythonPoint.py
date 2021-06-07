@@ -1,15 +1,44 @@
 from PIL import Image, ImageDraw, ImageFont
 from colorsys import hsv_to_rgb
+from pathlib import Path
 
 # --------------------------------------------------------------------
 txt_name = 'PythonPoint - Test1.txt'
-
-font_shorts = {'Roboto': 'Fonts/Roboto/Roboto-Bold.ttf'}
-
-
 # This is the only thing you should edit (or replace with an input() based solution, if you'd like).
-# Everything below is the actual code (including the resolution variable, which is editable through the txt document.)
 # --------------------------------------------------------------------
+
+font_shorts = {}
+for i in [(i, i.stem) for i in Path('./Fonts').glob('**/*') if i.is_file()]:
+    path = str(i[0]).replace('//', '/').replace('\\', '/')
+    if path[-4:] != '.ttf':
+        continue
+    name = i[1].split('-')
+    f_type = name[1]
+    if 'Italic' in f_type:
+        continue
+
+    if 'Thin' in f_type:
+        suffix = 'T'
+    elif 'ExtraLight' in f_type:
+        suffix = 'El'
+    elif 'Light' in f_type:
+        suffix = 'L'
+    elif 'Regular' in f_type:
+        suffix = ''
+    elif 'Medium' in f_type:
+        suffix = 'M'
+    elif 'SemiBold' in f_type:
+        suffix = 'Sb'
+    elif 'Bold' in f_type:
+        suffix = 'B'
+    elif 'ExtraBold' in f_type:
+        suffix = 'Eb'
+    elif 'Black' in f_type:
+        suffix = 'Bl'
+    else:
+        suffix = f_type
+    font_shorts[name[0] + suffix] = path
+
 
 def color_convert(*color):
     color = list(color)
@@ -196,14 +225,12 @@ for slide in instructions:  # Actually iterate through and generate stuff
                 if d.textsize(' '.join(tmp_line), fnt)[0] > wrap_length:
                     texts.append(' '.join([i for i in tmp_line[:-1]]))
                     tmp_line = [word]
-            if len(texts) == 0:
-                texts = [' '.join([i for i in tmp_line])]
+            texts.append(' '.join([i for i in tmp_line]))
 
             d.multiline_text((pos[0], convert(pos[1])), '\n'.join(texts), anchor=anchor, font=fnt, fill=color)
 
     ims.append(im)
     im.show()
-print(save)
 if save is not False:
     for index, i in enumerate(ims, start=1):
         print(f'{save}{index}.png')
