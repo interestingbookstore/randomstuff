@@ -60,24 +60,44 @@ class _SavedInfo:
 
 
 class UI:
+    class ProgressBar:
+        def __init__(self, ui_class):
+            self._progress = 0
+            self._total = 0
+            self._percent = 0
+            self.style = ui_class.style
+
+        def update(self, progress, total, description='', length=50):
+            percent = int(progress / total * length)
+            if percent != self._percent:
+                print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * percent}{self.style['reset']}{' ' * (100 - percent)} {percent}%", end='')
+                if progress >= total:
+                    print('\r' + description + self.style['progress_bar_done'] + ' Done!')
+                self._percent = percent
+
     class _OptionsList:
         """Used for making lists, of options!"""
 
-        def __init__(self, ui_class):
+        def __init__(self, ui_class, options=()):
             self.options = []
             self.ui_class = ui_class
             self.style = self.ui_class.style
+            for i in options:
+                self.add(i)
 
         def error_print(self, text):
             print(self.style['error'] + text + '\n')
 
-        def add(self, name, function):
-            self.options.append((str(name), function))
+        def add(self, option, option_func=None):
+            if option_func is None:
+                self.options.append((str(option), option))
+            else:
+                self.options.append((str(option), option_func))
 
         def show(self):
             for index, i in enumerate(self.options):
                 index += 1
-                print(f"{self.style['options_list_number']}{index}{self.style['options_list_separator']}{self.style['normal_output_color']}{i[0]}")
+                print(f"{self.style['options_list_number']}{index}{self.style['options_list_separator']}{self.style['normal_output_color']}{str(i[0])}")
 
             while True:
                 try:
@@ -90,15 +110,9 @@ class UI:
 
                     if inp == 0:
                         raise IndexError
-                    break
+                    return self.options[inp - 1][1]
                 except (IndexError, ValueError):
                     self.error_print('Your choice must correspond to one of the options above!')
-
-            option = self.options[inp - 1][1]
-            if type(option) == tuple:
-                option[0](option[1])
-            else:
-                option()
 
     class Colors:
         def __init__(self):
@@ -131,11 +145,14 @@ class UI:
         self.run = False
         self.steps = None
         self.colors = self.Colors()
-        self.style = {'ask_color': self.colors.yellow, 'options_list_number': self.colors.yellow, 'normal_output_color': '\033[0m', 'options_list_separator': ' - ', 'user_input': self.colors.reset, 'error': self.colors.red, 'bold_formatting': self.colors.bold, 'reset': self.colors.reset}
+        self.style = {'ask_color': self.colors.yellow, 'options_list_number': self.colors.yellow, 'options_list_separator': ' - ', 'progress_bar': self.colors.full_rectangle,
+                      'progress_bar_color': self.colors.yellow, 'progress_bar_done': self.colors.green, 'normal_output_color': '\033[0m', 'user_input': self.colors.reset,
+                      'error': self.colors.red, 'bold_formatting': self.colors.bold, 'reset': self.colors.reset}
         self.repeating = False
+        self.progress_bar = self.ProgressBar(self)
 
-    def OptionsList(self):
-        return self._OptionsList(self)
+    def OptionsList(self, options=()):
+        return self._OptionsList(self, options)
 
     def on_run(self, func):  # used for decorator
         self.steps = func
