@@ -42,6 +42,10 @@ class _SavedInfo:
             with open(self.path, 'rb') as f:
                 self.stuff = pickle.load(f)
 
+    def clear(self):
+        self.stuff.clear()
+        self._update()
+
     def __getitem__(self, item):
         return self.stuff[item]
 
@@ -55,60 +59,89 @@ class _SavedInfo:
         self._update()
 
 
-class OptionsList:
-    """Used for making lists, of options!"""
-
-    def __init__(self, uiclass):
-        self.options = []
-        self.uiclass = uiclass
-
-    def error_print(self, text):
-        print(self.uiclass.style['ERROR'] + text + '\n')
-
-    def add(self, name, function):
-        self.options.append((name, function))
-
-    def run(self):
-        for index, i in enumerate(self.options):
-            index += 1
-            print(f"{self.uiclass.style['HEADER']}{index}{self.uiclass.style['LIST_SEP']}{self.uiclass.style['TEXT']}{i[0]}")
-
-        while True:
-            try:
-                inp = input(f"{self.uiclass.style['HEADER2']}Choice:{self.uiclass.style['USER_INPUT']} ")
-                if inp == '/help':
-                    print(self.uiclass.style['TEXT'] + 'Listed above are different options. Simple type the number to the left of the option you want to select.\n')
-                    continue
-                inp = int(inp)
-                self.options[inp - 1]  # Python will try to run this line. If it raises an error, we'll know that something is wrong.
-
-                if inp == 0:
-                    raise IndexError
-                break
-            except (IndexError, ValueError):
-                self.error_print('Your choice must correspond to one of the options above!')
-
-        option = self.options[inp - 1][1]
-        if type(option) == tuple:
-            option[0](option[1])
-        else:
-            option()
-
-
 class UI:
+    class _OptionsList:
+        """Used for making lists, of options!"""
+
+        def __init__(self, ui_class):
+            self.options = []
+            self.ui_class = ui_class
+            self.style = self.ui_class.style
+
+        def error_print(self, text):
+            print(self.style['error'] + text + '\n')
+
+        def add(self, name, function):
+            self.options.append((str(name), function))
+
+        def show(self):
+            for index, i in enumerate(self.options):
+                index += 1
+                print(f"{self.style['options_list_number']}{index}{self.style['options_list_separator']}{self.style['normal_output_color']}{i[0]}")
+
+            while True:
+                try:
+                    inp = input(f"{self.style['bold_formatting']}{self.style['ask_color']}Choice: {self.style['reset']}{self.style['user_input']}")
+                    if inp == '/help':
+                        print(self.style['normal_output_color'] + 'Listed above are different options; simply type the number to the left of the option you want to select.\n')
+                        continue
+                    inp = int(inp)
+                    self.options[inp - 1]  # Python will try to run this line. If it raises an error, we'll know that something is wrong.
+
+                    if inp == 0:
+                        raise IndexError
+                    break
+                except (IndexError, ValueError):
+                    self.error_print('Your choice must correspond to one of the options above!')
+
+            option = self.options[inp - 1][1]
+            if type(option) == tuple:
+                option[0](option[1])
+            else:
+                option()
+
+    class Colors:
+        def __init__(self):
+            self.reset = '\033[0m'
+
+            self.white = '\33[97m'
+            self.gray = '\33[37m'
+            self.black = ''
+
+            self.red = '\33[31m'
+            self.orange = '\33[36m'
+            self.yellow = '\33[33m'
+            self.green = '\33[32m'
+            self.blue = '\33[34m'
+            self.purple = '\33[35m'
+
+            self.bold = '\33[1m'
+            self.underline = '\33[4m'
+            self.italic = '\33[3m'
+            self.strikethrough = '\33[9m'
+
+            self.full_rectangle = '█'
+            self.rectangles = {'Upper 1/2': '▀', '1/8': '▁', '1/4': '▂', '3/8': '▃', '1/2': '▄', '5/8': '▅', '3/4': '▆',
+                               '7/8': '▇', '1': '█', 'l7/8': '▉', 'l3/4': '▊', 'l5/8': '▋', 'l1/2': '▌', 'l3/8': '▍',
+                               'l1/4': '▎', 'l1/8': '▏', 'r1/2': '▐', 'light': '░', 'medium': '▒', 'dark': '▓',
+                               'u1/8': '▔', 'r1/8': '▕'}
 
     def __init__(self, txt_name):
         self.save_info = _SavedInfo(txt_name)
         self.run = False
         self.steps = None
-        self.style = {'HEADER': '\33[33m', 'HEADER2': '\33[34m', 'TEXT': '\033[0m', 'LIST_SEP': ' - ', 'USER_INPUT': '\033[0m', 'ERROR': '\33[31m'}
+        self.colors = self.Colors()
+        self.style = {'ask_color': self.colors.yellow, 'options_list_number': self.colors.yellow, 'normal_output_color': '\033[0m', 'options_list_separator': ' - ', 'user_input': self.colors.reset, 'error': self.colors.red, 'bold_formatting': self.colors.bold, 'reset': self.colors.reset}
         self.repeating = False
+
+    def OptionsList(self):
+        return self._OptionsList(self)
 
     def on_run(self, func):  # used for decorator
         self.steps = func
 
     def error_print(self, text):
-        print(self.style['ERROR'] + text + '\n')
+        print(self.style['error'] + text + '\n')
 
     def start(self):
         self.run = True
@@ -120,7 +153,7 @@ class UI:
             add = ''
             if validation == 'y/n' or validation == 'yn':
                 add += ' (y/n)'
-            inp = input(self.style['HEADER2'] + question + add + end + self.style['TEXT'])
+            inp = input(self.style['bold_formatting'] + self.style['ask_color'] + question + add + end + self.colors.reset + self.style['user_input'])
             if inp == '/help':
                 if validation == str or validation == 'str':
                     mes = 'Your answer can be pretty much anything.'
@@ -141,7 +174,7 @@ class UI:
 Separate them with spaces, include a backslash directly before one ("...\\ ...") to ignore it."""
                 else:
                     mes = "The validation is something else, you're on your own for this one!"
-                print(self.style['TEXT'] + mes + '\n')
+                print(self.style['normal_output_color'] + mes + '\n')
                 continue
 
             if validation == str or validation == 'str':
