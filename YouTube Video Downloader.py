@@ -22,4 +22,4 @@ working_folder = Path.cwd()
 print(working_folder)
 print(f'ffmpeg -i {working_folder}/tmp_download_video.mp4 -i {working_folder}/tmp_download_audio.mp4 -c copy {working_folder}/output.mp4')
 
-subprocess.run(f'ffmpeg -i {working_folder}/tmp_download_video.mp4 -i {working_folder}/tmp_download_audio.mp4 -c copy {working_folder}/{name}.mp4')
+subprocess.run(f'ffmpeg -i {working_folder}/tmp_download_video.mp4 -i {working_folder}/tmp_download_audio.mp4 -c copy "{working_folder}/{name}.mp4"')
