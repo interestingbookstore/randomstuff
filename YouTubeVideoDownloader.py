@@ -29,8 +29,7 @@ def download_progress(stream, chunk, bytes_remaining):
     ui.progress_bar.update(first - bytes_remaining, first, 'Downloading video')
 
 
-# arguments = sys.argv[1:]
-arguments = ['https://www.youtube.com/watch?v=oAHbLRjF0vo', '1080', 'idk']
+arguments = sys.argv[1:]
 # --------------------  URL  ----------------------------------------
 if len(arguments) >= 1:
     url = arguments[0]
