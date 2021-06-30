@@ -3,9 +3,13 @@ from pytube import YouTube
 import subprocess
 from pathlib import Path
 
-ui = UI('YouTube Video Downloader')
+# -----------------------------------------
+Save_Location = r'C:\Users\bookstore\Documents'  # By default the tmp files and output files are saved in the current working directory.
+#     (No slash at the end!!)      Simply edit this line if you'd like to save them somewhere else.
+# -----------------------------------------
+
+ui = UI()
 c = ui.colors
-s = ui.save_info
 ui.style['ask_color'] = c.red
 ui.style['progress_bar_color'] = c.red
 
@@ -47,18 +51,18 @@ if name == '':
     name = 'Downloaded YouTube video'
 
 audio = stream.get_audio_only()
-working_folder = str(Path.cwd()).replace('\\', '/')
+Save_Location = Save_Location.replace('\\', '/')
 if stream_choice == 'Audio only':
-    audio.download(filename=name)
+    audio.download(output_path=Save_Location, filename=name)
 else:
     video_stream = stream.filter(res=stream_choice).first()
     v_extension = video_stream.mime_type.split('/')[-1]
     a_extension = audio.mime_type.split('/')[-1]
-    video_stream.download(filename='tmp_download_video')
-    audio.download(filename='tmp_download_audio')
+    video_stream.download(output_path=Save_Location, filename='tmp_download_video')
+    audio.download(output_path=Save_Location, filename='tmp_download_audio')
 
-    subprocess.run(f'ffmpeg -i {working_folder}/tmp_download_video.{v_extension} -i {working_folder}/tmp_download_audio.{a_extension} -c copy "{working_folder}/{name}.mp4"')
+    subprocess.run(f'ffmpeg -i {Save_Location}/tmp_download_video.{v_extension} -i {Save_Location}/tmp_download_audio.{a_extension} -c copy "{Save_Location}/{name}.mp4"')
 
 print(c.green + '=' * 80)
-print(c.reset + f'Video downloaded as {c.bold}{c.red}{name}{c.reset} at {c.bold}{working_folder}/{name}')
+print(c.reset + f'Video downloaded as {c.bold}{c.red}{name}{c.reset} at {c.bold}{Save_Location}/{name}')
 print('=' * 80)
