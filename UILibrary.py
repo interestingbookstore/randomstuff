@@ -1,15 +1,30 @@
 import pickle
 import os
+import sys
 
 # ---------------------------------------------------------
 
 txt_save_folder = r''
+
 
 # ---------------------------------------------------------
 # With this library, you can edit a dictionary, which will save its information, even if you close and rerun the python script.
 # It accomplishes this through a pickle file, which has to be saved somewhere.
 # If the variable above is left as an empty string, it'll be saved in the current directory. Otherwise,
 # it'll be saved in the folder above. (no slash at the end)
+
+def large_number_formatter(number, type='notation', decimal_places=2):
+    num = str(number)
+    length = len(num)
+    thousands = (len(num) - 1) // 3
+    if type == ',':
+        for i in range(thousands):
+            i += 1
+            num = num[:length - i * 3] + ',' + num[length - i * 3:]
+        return num
+    else:
+        notations = 'K', 'M', 'B', 'T', 'Q'
+        return str(round(number / 10 ** (thousands * 3), decimal_places)) + notations[thousands - 1]
 
 
 def check_type(val, validation):
@@ -68,12 +83,15 @@ class UI:
             self.style = ui_class.style
 
         def update(self, progress, total, description='', length=50):
-            percent = int(progress / total * length)
-            if percent != self._percent:
-                print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * percent}{self.style['reset']}{' ' * (100 - percent)} {percent}%", end='')
-                if progress >= total:
-                    print('\r' + description + self.style['progress_bar_done'] + ' Done!')
-                self._percent = percent
+            if total == 0:
+                print('\r' + description + self.style['progress_bar_done'] + ' Done!')
+            else:
+                percent = int(progress / total * length)
+                if percent != self._percent:
+                    print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * percent}{self.style['reset']}{' ' * (100 - percent)} {percent}%", end='')
+                    if progress >= total:
+                        print('\r' + description + self.style['progress_bar_done'] + ' Done!')
+                    self._percent = percent
 
     class _OptionsList:
         """Used for making lists, of options!"""
@@ -105,6 +123,8 @@ class UI:
                     if inp == '/help':
                         print(self.style['normal_output_color'] + 'Listed above are different options; simply type the number to the left of the option you want to select.\n')
                         continue
+                    elif inp == '':
+                        return self.options[0][1]
                     inp = int(inp)
                     self.options[inp - 1]  # Python will try to run this line. If it raises an error, we'll know that something is wrong.
 
@@ -148,6 +168,9 @@ class UI:
                       'progress_bar_color': self.colors.yellow, 'progress_bar_done': self.colors.green, 'normal_output_color': '\033[0m', 'user_input': self.colors.reset,
                       'error': self.colors.red, 'bold_formatting': self.colors.bold, 'reset': self.colors.reset}
         self.progress_bar = self.ProgressBar(self)
+
+    def quit(self):
+        sys.exit()
 
     def set_default(self, name, default_value):
         if name not in self.save_info.stuff:
