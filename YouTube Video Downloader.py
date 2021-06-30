@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 # -----------------------------------------
-Save_Location = r'C:\Users\bookstore\Documents'  # By default the tmp files and output files are saved in the current working directory.
+Save_Location = str(Path.cwd())  # By default the tmp files and output files are saved in the current working directory.
 #     (No slash at the end!!)      Simply edit this line if you'd like to save them somewhere else.
 # -----------------------------------------
 
