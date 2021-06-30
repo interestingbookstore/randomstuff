@@ -1,3 +1,6 @@
+import pickle
+import os
+
 # ---------------------------------------------------------
 
 txt_save_folder = r''
@@ -7,9 +10,6 @@ txt_save_folder = r''
 # It accomplishes this through a pickle file, which has to be saved somewhere.
 # If the variable above is left as an empty string, it'll be saved in the current directory. Otherwise,
 # it'll be saved in the folder above. (no slash at the end)
-
-import pickle
-import os
 
 
 def check_type(val, validation):
@@ -140,30 +140,24 @@ class UI:
                                'l1/4': '▎', 'l1/8': '▏', 'r1/2': '▐', 'light': '░', 'medium': '▒', 'dark': '▓',
                                'u1/8': '▔', 'r1/8': '▕'}
 
-    def __init__(self, txt_name):
-        self.save_info = _SavedInfo(txt_name)
-        self.run = False
-        self.steps = None
+    def __init__(self, txt_name=None):
+        if txt_name is not None:
+            self.save_info = _SavedInfo(txt_name)
         self.colors = self.Colors()
         self.style = {'ask_color': self.colors.yellow, 'options_list_number': self.colors.yellow, 'options_list_separator': ' - ', 'progress_bar': self.colors.full_rectangle,
                       'progress_bar_color': self.colors.yellow, 'progress_bar_done': self.colors.green, 'normal_output_color': '\033[0m', 'user_input': self.colors.reset,
                       'error': self.colors.red, 'bold_formatting': self.colors.bold, 'reset': self.colors.reset}
-        self.repeating = False
         self.progress_bar = self.ProgressBar(self)
+
+    def set_default(self, name, default_value):
+        if name not in self.save_info.stuff:
+            self.save_info[name] = default_value
 
     def OptionsList(self, options=()):
         return self._OptionsList(self, options)
 
-    def on_run(self, func):  # used for decorator
-        self.steps = func
-
     def error_print(self, text):
         print(self.style['error'] + text + '\n')
-
-    def start(self):
-        self.run = True
-        while self.run:
-            self.steps()
 
     def ask(self, question, validation=str, extra=None, end=': '):
         while True:
@@ -245,8 +239,3 @@ Separate them with spaces, include a backslash directly before one ("...\\ ...")
                         return validation[0](inp)
                     except validation[1]:
                         self.error_print(validation[2])
-
-    def repeat(self, func):  # Used for decorator
-        self.repeating = True
-        while self.repeating:
-            func()
