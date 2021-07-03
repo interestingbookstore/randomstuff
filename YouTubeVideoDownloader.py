@@ -8,9 +8,15 @@ from pathlib import Path
 TMP_File_Save_Location = '/.tmp'
 Save_Location = str(Path.cwd())  # By default the tmp files and output files are saved in the current working directory.
 #     (No slash at the end!!)      Simply edit this line if you'd like to save them somewhere else.
+
+formatting = True  # By default, this script uses ANSI escape sequences to add color and text effects to certain elements.
+#                    Normally, these wouldn't actually be visible, and they'd simply modify how the text looks. However, applications
+#                    (like Windows's Command Prompt) still render them (and they don't actually change anything there), which looks a bit
+#                    odd. So, if you're in a similar situation, or you simply dislike ANSI escape sequences, set this variable to "False"
+#                    (case sensitive) to disable them.
 # -----------------------------------------
 
-ui = UI()
+ui = UI(formatting=formatting)
 c = ui.colors
 ui.style['ask_color'] = c.red
 ui.style['options_list_number'] = c.red
@@ -19,6 +25,7 @@ ui.style['progress_bar_color'] = c.red
 resolutions = '4320p', '2160p', '1440p', '1080p', '720p', '480p', '360p', '240p', '144p'
 
 first = None
+downloading = 'video'
 
 
 def download_progress(stream, chunk, bytes_remaining):
@@ -27,7 +34,7 @@ def download_progress(stream, chunk, bytes_remaining):
 
     if first is None:
         first = bytes_remaining
-    ui.progress_bar.update(first - bytes_remaining, first, 'Downloading video')
+    ui.progress_bar.update(first - bytes_remaining, first, f'Downloading {downloading}')
 
 
 arguments = argv[1:]
@@ -42,6 +49,42 @@ if len(arguments) == 1 and (arguments[0] == '-h' or arguments[0] == '--help'):
         
         In total, it uses three parameters; the {c.bold}{c.red}URL{c.reset} of the video,
         the {c.bold}{c.red}resolution{c.reset} of the video, and the {c.bold}{c.red}filename{c.reset} of the result.
+        
+        --------------------  Notes  ----------------------------------------
+        You can modify a couple of settings within the actual script (VideoDownloader.py), at the top.
+            The {c.bold}"TMP_File_Save_Location"{c.reset} is where this script will save the video-only and audio-only
+        streams, before they're combined to make the output file.
+            The Save_Location is where the final output files are saved.
+        The {c.bold}Formatting{c.reset} variable can be set to either {c.bold}"True"{c.reset} or {c.bold}"False"{c.reset}.
+            If set to false, the colored and otherwise formatted (i.e., shown in bold) text that appears when the script runs
+        will be reverted to the non-formatted form. So, no ANSI escape codes.
+        
+        --------------------  Examples  ----------------------------------------
+        For these, I'll be using one of CGP Grey's videos, titled "The Race to Win Staten Island"
+        
+        This one leads you through the parameters via the UI after you press enter.
+            python VideoDownloader.py
+        
+        Here the URL is already entered, so it only asks via UI for the latter two.
+            python VideoDownloader.py https://www.youtube.com/watch?v=Ex74x_gqTU0
+        
+        You can shorten the URL quite a bit...
+            python VideoDownloader.py v=Ex74x_gqTU0
+        
+        Pre-add more parameters!
+            python VideoDownloader.py v=Ex74x_gqTU0 2160 The Race to Win Staten Island
+        
+        This one does the exact same thing
+            python VideoDownloader.py v=Ex74x_gqTU0 max /title
+        
+        Or, (in general) if you want the highest res version that doesn't exceed a limit...
+            python VideoDownloader.py v=Ex74x_gqTU0 max1440 /title
+        
+        Maybe you want to add a suffix, and a prefix?
+            python VideoDownloader.py hello/titleworld
+        
+        It'll still work, you just have to put in the correct info (in this case, res) via UI
+            python VideoDownloader.py v=Ex74x_gqTU0 552960 /title
         
         --------------------  Terminal  ----------------------------------------
         Via the terminal, you simply type in the parameters:
@@ -156,12 +199,14 @@ if name == '':
 audio = stream.get_audio_only()
 Save_Location = Save_Location.replace('\\', '/')
 if stream_choice == 'Audio only':
+    downloading = 'audio'
     audio.download(output_path=Save_Location, filename=name)
 else:
     video_stream = stream.filter(res=stream_choice).first()
     v_extension = video_stream.mime_type.split('/')[-1]
     a_extension = audio.mime_type.split('/')[-1]
     video_stream.download(output_path=TMP_File_Save_Location, filename='tmp_download_video')
+    downloading = 'audio'
     audio.download(output_path=TMP_File_Save_Location, filename='tmp_download_audio')
 
     system(f'ffmpeg -loglevel warning -i "{TMP_File_Save_Location}/tmp_download_video.{v_extension}" -i "{TMP_File_Save_Location}/tmp_download_audio.{a_extension}" -c copy "{Save_Location}/{name}.mp4"')
