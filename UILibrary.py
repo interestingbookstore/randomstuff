@@ -80,6 +80,7 @@ class UI:
             self._progress = 0
             self._total = 0
             self._percent = 0
+            self._done = False
             self.style = ui_class.style
 
         def update(self, progress, total, description='', length=50):
@@ -92,7 +93,11 @@ class UI:
                 if percent != self._percent:
                     print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * amount}{self.style['reset']}{' ' * (length - amount)} {percent}%", end='')
                     if percent >= 100:
-                        print('\r' + description + self.style['progress_bar_done'] + ' Done!')
+                        if not self._done:
+                            print('\r' + description + self.style['progress_bar_done'] + ' Done!' + self.style['reset'])
+                            self._done = True
+                    else:
+                        self._done = False
                     self._percent = percent
 
     class _OptionsList:
@@ -128,12 +133,18 @@ class UI:
                     elif inp == '':
                         return self.options[0][1]
                     inp = int(inp)
+                    if inp < 0:
+                        inp += 1
+                    elif inp == 0:
+                        raise IndexError
                     self.options[inp - 1]  # Python will try to run this line. If it raises an error, we'll know that something is wrong.
 
-                    if inp == 0:
-                        raise IndexError
                     return self.options[inp - 1][1]
                 except (IndexError, ValueError):
+                    option_names = tuple(i[0] for i in self.options)
+                    inp = str(inp)
+                    if inp in option_names:
+                        return self.options[option_names.index(inp)][1]
                     self.error_print('Your choice must correspond to one of the options above!')
 
     class Colors:
@@ -162,12 +173,30 @@ class UI:
                                'l1/4': '▎', 'l1/8': '▏', 'r1/2': '▐', 'light': '░', 'medium': '▒', 'dark': '▓',
                                'u1/8': '▔', 'r1/8': '▕'}
 
-    def __init__(self, txt_name=None):
+    def __init__(self, txt_name=None, formatting=True):
         if txt_name is not None:
             self.save_info = _SavedInfo(txt_name)
         self.colors = self.Colors()
+        if not formatting:
+            self.colors.reset = ''
+
+            self.colors.white = ''
+            self.colors.gray = ''
+            self.colors.black = ''
+
+            self.colors.red = ''
+            self.colors.orange = ''
+            self.colors.yellow = ''
+            self.colors.green = ''
+            self.colors.blue = ''
+            self.colors.purple = ''
+
+            self.colors.bold = ''
+            self.colors.underline = ''
+            self.colors.italic = ''
+            self.colors.strikethrough = ''
         self.style = {'ask_color': self.colors.yellow, 'options_list_number': self.colors.yellow, 'options_list_separator': ' - ', 'progress_bar': self.colors.full_rectangle,
-                      'progress_bar_color': self.colors.yellow, 'progress_bar_done': self.colors.green, 'normal_output_color': '\033[0m', 'user_input': self.colors.reset,
+                      'progress_bar_color': self.colors.yellow, 'progress_bar_done': self.colors.green, 'normal_output_color': self.colors.reset, 'user_input': self.colors.reset,
                       'error': self.colors.red, 'bold_formatting': self.colors.bold, 'reset': self.colors.reset}
         self.progress_bar = self.ProgressBar(self)
 
