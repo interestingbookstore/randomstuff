@@ -1,6 +1,5 @@
 import pickle
-import os
-import sys
+from sys import exit as s_exit
 
 # ---------------------------------------------------------
 
@@ -51,11 +50,12 @@ class _SavedInfo:
     def __init__(self, file_name):
         self.path = txt_save_folder + file_name + '.pkl'
         self.stuff = {}
-        with open(self.path, 'a'):
-            pass
-        if os.path.getsize(self.path) > 0:
+        try:
             with open(self.path, 'rb') as f:
                 self.stuff = pickle.load(f)
+        except FileNotFoundError:
+            with open(self.path, 'a'):
+                pass
 
     def clear(self):
         self.stuff.clear()
@@ -86,10 +86,12 @@ class UI:
             if total == 0:
                 print('\r' + description + self.style['progress_bar_done'] + ' Done!')
             else:
-                percent = int(progress / total * length)
+                fraction = progress / total
+                percent = int(fraction * 100)
+                amount = int(fraction * length)
                 if percent != self._percent:
-                    print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * percent}{self.style['reset']}{' ' * (100 - percent)} {percent}%", end='')
-                    if progress >= total:
+                    print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * amount}{self.style['reset']}{' ' * (length - amount)} {percent}%", end='')
+                    if percent >= 100:
                         print('\r' + description + self.style['progress_bar_done'] + ' Done!')
                     self._percent = percent
 
@@ -170,7 +172,7 @@ class UI:
         self.progress_bar = self.ProgressBar(self)
 
     def quit(self):
-        sys.exit()
+        s_exit()
 
     def set_default(self, name, default_value):
         if name not in self.save_info.stuff:
