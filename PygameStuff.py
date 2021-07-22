@@ -8,23 +8,41 @@ PROCESS_PER_MONITOR_DPI_AWARE = 2
 ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
 
 
-def imagestuff(img, scale=1):
-    if str(type(img)) == "<class 'PygameFuncLibrary.Rectangle'>":
-        return pygame.image.fromstring(img.image, (img.width, img.height), 'RGBA')
-    else:
-        if scale == 1:
-            return pygame.image.load(img)
-        elif scale == 2:
-            return pygame.transform.scale2x(pygame.image.load(img))
+def image_stuff(image, scale=1):
+    if type(image) == Rectangle:
+        return pygame.image.fromstring(image.image, (image.width, image.height), 'RGBA')
+
+    if type(image) == str:
+        image = Image.open(image)
+
+    center_info = False
+
+    if type(scale) == tuple:
+        image = image.resize(fit_image(image.size, scale))
+        if image.size[0] == scale[0]:
+            center_info = 0, (scale[1] - image.size[1]) // 2
         else:
-            img = pygame.image.load(img)
-            imgsize = img.get_size()
-            return pygame.transform.smoothscale(img, (round(imgsize[0] * scale), round(imgsize[1] * scale)))
+            center_info = (scale[0] - image.size[0]) // 2, 0
+    else:
+        image = image.resize((round(image.size[0] * scale), round(image.size[1] * scale)))
+
+    if not center_info:
+        return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA')
+    return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA'), center_info
+
+
+def fit_image(image_res, maximum):
+    x_fac = maximum[0] / image_res[0]
+    y_fac = maximum[1] / image_res[1]
+
+    if x_fac < y_fac:
+        return maximum[0], round(image_res[1] * x_fac)
+    return round(image_res[0] * y_fac), maximum[1]
 
 
 class Sprite:
     def __init__(self, img, x, y, scale=1):
-        self.img = imagestuff(img, scale)
+        self.img = image_stuff(img, scale)
         self.x = x
         self.y = y
         self.oldrect = pygame.Rect(0, 0, 0, 0)
@@ -32,7 +50,7 @@ class Sprite:
         self.scale = scale
 
     def update(self, img, scale=1):
-        self.img = imagestuff(img, scale)
+        self.img = image_stuff(img, scale)
 
     def updatelocation(self, x, y):
         self.x = x
@@ -46,9 +64,9 @@ class Sprite:
         if not erase:
             # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
             # update that region, make the current rectangle the old rectangle (for the next frame)
-            screen.blit(self.img, (self.x - self.dim[0] // 2, ny(self.y + self.dim[1] // 2)))
+            screen.blit(self.img, (self.x, ny(self.y + self.dim[1])))
         else:
-            screen.fill(background)
+            scene.set_background(background, _update=False)
         rect = pygame.Rect(self.x - self.dim[0], ny(self.y + self.dim[1]), self.dim[0] * 2, self.dim[1] * 2)
         rect2 = pygame.Rect.union(rect, self.oldrect)
         pygame.display.update(rect2)
@@ -194,7 +212,7 @@ class Text:
     def update(self):
         self.oldrect = copy(self.rect)
         self.font2 = pygame.freetype.Font(self.font, self.size)
-        self.fontsurf, self.rect = self.font2.render(self.text, self.color, size=self.size)
+        self.fontsurf, self.rect = self.font2.render(str(self.text), self.color, size=self.size)
         self.dim = (self.rect.width, self.rect.height)
         self.updatetext = True
 
@@ -251,7 +269,7 @@ class Button:
 
 
 class Game:
-    def __init__(self, res, fps, fullscreen=False, title='Untitled Game', icon=None):
+    def __init__(self, res, fps, fullscreen=False, title='Untitled Game', icon=None, frame=True):
         self.current_scene = None
         self.run = True
         self.res = res
@@ -264,17 +282,26 @@ class Game:
         self.mouseposition = (0, 0)
         self.quit_letters = ['q', 'u', 'i', 't']
         self.quit_progress = 0
+        self.delta = 0
+        self._previous_frame_total_ticks = 0
 
         pygame.init()
         if self.fullscreen:
-            self.screen = pygame.display.set_mode(self.res, pygame.FULLSCREEN)
+            if frame:
+                self.screen = pygame.display.set_mode(self.res, pygame.FULLSCREEN, pygame.HWSURFACE)
+            else:
+                self.screen = pygame.display.set_mode(self.res, pygame.FULLSCREEN, pygame.NOFRAME, pygame.HWSURFACE)
         else:
-            self.screen = pygame.display.set_mode(self.res)
+            if frame:
+                self.screen = pygame.display.set_mode(self.res, pygame.HWSURFACE)
+            else:
+                self.screen = pygame.display.set_mode(self.res, pygame.NOFRAME, pygame.HWSURFACE)
         self.clock = pygame.time.Clock()
 
         pygame.display.set_caption(title)
         if icon is not None:
             pygame.display.set_icon(pygame.image.load(icon))
+        self.display_resolution = self.screen.get_size()
 
     def ny(self, y):
         return self.res[1] - y
@@ -282,8 +309,8 @@ class Game:
     def run_game(self):
         mouse = pygame.mouse
         while self.run:
-            self.clock.tick(60)
-
+            self.clock.tick(self.framerate)
+            t = pygame.time.get_ticks()
             self.keydowns.clear()
             self.keyups.clear()
             self.mousedowns.clear()
@@ -325,6 +352,8 @@ class Game:
                         self.mouseups.append('middle')
 
             self.current_scene.run_scene()
+            self.delta = (t - self._previous_frame_total_ticks) / 1000
+            self._previous_frame_total_ticks = t
 
     def quit(self):
         self.run = False
@@ -338,54 +367,27 @@ class Game:
             self.game = game
             self.stuff = []
             self.update_func = do_nothing
-            self.background = (0, 0, 0)
+            self.background = 0, 0, 0
+            self.background_center = 0, 0
             self.redraw = False
 
-        def set_background(self, background, res=(0, 0)):
-            if type(background) == tuple:
+        def set_background(self, background, _update=True):
+            if type(background) == pygame.Surface:
+                self.background = background
+                self.game.screen.blit(self.background, self.background_center)
+            elif type(background) == tuple:
                 self.background = background
                 self.game.screen.fill(self.background)
-            elif type(background) == bytes:
-                self.background = pygame.image.fromstring(background, (res[0], res[1]), 'RGBA')
-                self.game.screen.blit(self.background, (0, 0))
             else:
-                img = Image.open(background)
-                size = img.size
-                res = self.game.res
-                ratio = (res[0] / size[0]) / (res[1] / size[1])
-                if ratio > 1:
-                    img = img.resize((round(res[1] / size[1] * size[0]), res[1]), 3)
-                elif ratio < 1:
-                    img = img.resize((res[0], round(size[0] / res[0] * res[1])), 3)
-                else:
-                    img = img.resize((res[0], res[1]), 3)
-                size = img.size
-
-                newsize = (res[0] if ratio > 1 else size[0], res[1] if ratio < 1 else size[1])
-                img2 = Image.new('RGBA', newsize, (0, 0, 0))
-                img2.paste(img, (round((res[0] - size[0]) / 2) if ratio > 1 else 0, round((res[1] - size[1]) / 2) if ratio < 1 else 0), img)
-                img2 = img2.convert('RGB')
-                self.background = pygame.image.fromstring(img2.tobytes('raw', 'RGB'), newsize, 'RGB')
-                self.game.screen.blit(self.background, (0, 0))
-
-                # img = pygame.image.load(background)
-                # imgsize = img.get_size()
-                # res = self.game.res
-                # print((round(res[0] / imgsize[0]), round(res[1] / imgsize[1])))
-                # self.background = pygame.transform.smoothscale(img, (res[0], res[1]))
-                # self.game.screen.blit(self.background, (0, 0))
-            pygame.display.flip()
-
-        def _change_background(self):
-            if type(self.background) == tuple:
-                self.game.screen.fill(self.background)
-            else:
-                self.game.screen.blit(self.background, (0, 0))
+                self.background, self.background_center = image_stuff(background, self.game.res)
+                self.game.screen.blit(self.background, self.background_center)
+            if _update:
+                pygame.display.flip()
 
         def run_scene(self):
             self.update_func()
 
-            self._change_background()
+            self.set_background(self.background, False)
 
             if self.redraw:
                 pygame.display.flip()
@@ -405,8 +407,8 @@ class Game:
                 for i in args:
                     self.stuff.append(i)
 
-        def remove(self, *args):
-            for i in args:
+        def remove(self, *objects):
+            for i in objects:
                 for index, j in enumerate(self.stuff):
                     if i == j:
                         self.stuff.pop(index)
