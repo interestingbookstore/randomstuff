@@ -9,7 +9,7 @@ ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
 
 
 def image_stuff(image, scale=1):
-    if type(image) == Rectangle:
+    if type(image) == RectangleImage:
         return pygame.image.fromstring(image.image, (image.width, image.height), 'RGBA')
 
     if type(image) == str:
@@ -45,18 +45,19 @@ class Sprite:
         self.img = image_stuff(img, scale)
         self.x = x
         self.y = y
-        self.oldrect = pygame.Rect(0, 0, 0, 0)
+        self.old_rect = pygame.Rect(0, 0, 0, 0)
         self.dim = self.img.get_size()
         self.scale = scale
 
     def update(self, img, scale=1):
         self.img = image_stuff(img, scale)
+        self.dim = self.img.get_size()
 
-    def updatelocation(self, x, y):
+    def update_location(self, x, y):
         self.x = x
         self.y = y
 
-    def draw(self, game, scene, screen, res, erase=False, background=None):
+    def _draw(self, game, scene, screen, res, erase=False, background=None):
         # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
         def ny(y):
             return res[1] - y
@@ -66,18 +67,93 @@ class Sprite:
             # update that region, make the current rectangle the old rectangle (for the next frame)
             screen.blit(self.img, (self.x, ny(self.y + self.dim[1])))
         else:
-            scene.set_background(background, _update=False)
+            scene.set_background(background, False)
         rect = pygame.Rect(self.x - self.dim[0], ny(self.y + self.dim[1]), self.dim[0] * 2, self.dim[1] * 2)
-        rect2 = pygame.Rect.union(rect, self.oldrect)
+        rect2 = pygame.Rect.union(rect, self.old_rect)
         pygame.display.update(rect2)
-        self.oldrect = rect
+        self.old_rect = rect
+
+
+class Line:
+    def __init__(self, point_1, point_2, color=(255, 255, 255), thickness=1):
+        self.p1 = point_1
+        self.p2 = point_2
+        self.color = color
+        self.thickness = thickness
+        self.old_rect = pygame.Rect(0, 0, 0, 0)
+
+    def _draw(self, game, scene, screen, res, erase=False, background=None):
+        # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
+        def ny(y):
+            if type(y) == tuple:
+                return y[0], res[1] - y[1]
+            return res[1] - y
+
+        if not erase:
+            # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
+            # update that region, make the current rectangle the old rectangle (for the next frame)
+            pygame.draw.line(screen, self.color, ny(self.p1), ny(self.p2), self.thickness)
+        else:
+            scene.set_background(background, False)
+        x_dis = self.p2[0] - self.p1[0]
+        y_dis = ny(self.p2[1] - self.p1[1])
+        if x_dis > 0:
+            left = self.p1[0]
+        else:
+            left = self.p2[0]
+        if y_dis > 0:
+            top = ny(self.p2[1])
+        else:
+            top = ny(self.p1[1])
+
+        rect = pygame.Rect(left - self.thickness, top - self.thickness, abs(x_dis) + self.thickness, abs(y_dis) + self.thickness)
+        pygame.draw.rect(screen, (255, 0, 0), rect)
+        rect2 = pygame.Rect.union(rect, self.old_rect)
+        pygame.display.update(rect2)
+        self.old_rect = rect
+
+
+class Rectangle:
+    def __init__(self, x, y, width, height, color=(255, 255, 255), outline_thickness=None, rounded_corners=None):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.color = color
+        self.outline_thickness = outline_thickness
+        self.rounded_corners = rounded_corners
+        self.old_rect = pygame.Rect(0, 0, 0, 0)
+
+    def _draw(self, game, scene, screen, res, erase=False, background=None):
+        def ny(y):
+            return res[1] - y
+
+        outline_thickness = self.outline_thickness if self.outline_thickness is not None else 1
+        rounded_corners = self.rounded_corners if self.rounded_corners is not None else 1
+
+        x = self.x
+        width = self.width
+        if width < 0:
+            width *= -1
+            x -= width - outline_thickness
+        y = self.y
+        height = self.height
+        if height < 0:
+            height *= -1
+            y -= height - outline_thickness
+
+        rect = pygame.Rect(x, ny(y) - height, width, height)
+        update_rect = pygame.Rect(x - outline_thickness // 2, ny(y) - height - outline_thickness // 2, width + outline_thickness + 5, height + outline_thickness + 5)
+        pygame.draw.rect(screen, self.color, rect, outline_thickness, rounded_corners)
+        pygame.display.update(pygame.Rect.union(update_rect, self.old_rect))
+        self.old_rect = update_rect
 
 
 def do_nothing():
     pass
 
 
-class Rectangle:
+class RectangleImage:
     def __init__(self, width, height, color):
         self.width = width
         self.height = height
@@ -105,7 +181,7 @@ class GameObject:
     def update(self, img, scale=1):
         self.img.update(img, scale)
 
-    def draw(self, game, scene, screen, res, erase=False, background=None):
+    def _draw(self, game, scene, screen, res, erase=False, background=None):
         # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
         def ny(y):
             return res[1] - y
@@ -216,7 +292,7 @@ class Text:
         self.dim = (self.rect.width, self.rect.height)
         self.updatetext = True
 
-    def draw(self, game, scene, screen, res, erase=False, background=None):
+    def _draw(self, game, scene, screen, res, erase=False, background=None):
         # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
         def ny(y):
             return res[1] - y
@@ -251,7 +327,7 @@ class Button:
         self.sprite = Sprite(Rectangle(self.width, self.height, self.color), self.x, self.y, 0, 1)
         self.pressed = False
 
-    def draw(self, game, scene, screen, res):
+    def _draw(self, game, scene, screen, res):
         status = scene.mouse_test('left')
         if status == 1:
             if self.x - round(self.width / 2) <= game.mouseposition[0] <= self.x + round(self.width / 2) and self.y - round(self.width / 2) <= game.mouseposition[1] <= self.y + round(self.height / 2):
@@ -275,13 +351,14 @@ class Game:
         self.res = res
         self.framerate = fps
         self.fullscreen = fullscreen
-        self.keydowns = []
-        self.keyups = []
-        self.mousedowns = []
-        self.mouseups = []
-        self.mouseposition = (0, 0)
+
+        self.input_downs = []
+        self.input_ups = []
+        self.currently_pressed = []
+        self.mouse_position = (0, 0)
         self.quit_letters = ['q', 'u', 'i', 't']
         self.quit_progress = 0
+
         self.delta = 0
         self._previous_frame_total_ticks = 0
 
@@ -311,17 +388,15 @@ class Game:
         while self.run:
             self.clock.tick(self.framerate)
             t = pygame.time.get_ticks()
-            self.keydowns.clear()
-            self.keyups.clear()
-            self.mousedowns.clear()
-            self.mouseups.clear()
+            self.input_ups.clear()
+            self.input_downs.clear()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.run = False
 
                 if event.type == pygame.KEYDOWN:
-                    self.keydowns.append(pygame.key.name(event.key))
+                    self.input_downs.append(pygame.key.name(event.key))
                     if pygame.key.name(event.key) == self.quit_letters[self.quit_progress]:
                         self.quit_progress += 1
                         if self.quit_progress == len(self.quit_letters):
@@ -329,31 +404,50 @@ class Game:
                     else:
                         self.quit_progress = 0
                 if event.type == pygame.KEYUP:
-                    self.keyups.append(pygame.key.name(event.key))
+                    self.input_ups.append(pygame.key.name(event.key))
 
                 if event.type == pygame.MOUSEMOTION:
                     position = mouse.get_pos()
-                    self.mouseposition = (position[0], self.res[1] - position[1])
+                    self.mouse_position = (position[0], self.res[1] - position[1])
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     pressed = mouse.get_pressed(3)
                     if pressed[0]:
-                        self.mousedowns.append('left')
+                        self.input_downs.append('left')
                     if pressed[2]:
-                        self.mousedowns.append('right')
+                        self.input_downs.append('right')
                     if pressed[1]:
-                        self.mousedowns.append('middle')
+                        self.input_downs.append('middle')
                 if event.type == pygame.MOUSEBUTTONUP:
                     pressed = mouse.get_pressed(3)
-                    if not pressed[0]:
-                        self.mouseups.append('left')
-                    if not pressed[2]:
-                        self.mouseups.append('right')
-                    if not pressed[1]:
-                        self.mouseups.append('middle')
+                    if not pressed[0] and 'left' in self.currently_pressed:
+                        self.input_ups.append('left')
+                    if not pressed[2] and 'right' in self.currently_pressed:
+                        self.input_ups.append('right')
+                    if not pressed[1] and 'middle' in self.currently_pressed:
+                        self.input_ups.append('middle')
+
+            for i in self.input_downs:
+                self.currently_pressed.append(i)
+
+            for i in self.input_ups:
+                self.currently_pressed.remove(i)
 
             self.current_scene.run_scene()
             self.delta = (t - self._previous_frame_total_ticks) / 1000
             self._previous_frame_total_ticks = t
+
+    def just_pressed(self, button):
+        if button in self.input_downs:
+            return 1
+        elif button in self.input_ups:
+            return -1
+        else:
+            return 0
+
+    def is_pressed(self, button):
+        if button in self.currently_pressed:
+            return True
+        return False
 
     def quit(self):
         self.run = False
@@ -386,7 +480,6 @@ class Game:
 
         def run_scene(self):
             self.update_func()
-
             self.set_background(self.background, False)
 
             if self.redraw:
@@ -394,17 +487,17 @@ class Game:
                 self.redraw = False
 
             for i in self.stuff:
-                i.draw(self.game, self, self.game.screen, self.game.res)
+                i._draw(self.game, self, self.game.screen, self.game.res)
 
         def game_update(self, func):
             self.update_func = func
 
-        def add(self, *args):
-            if type(args[0]) == list:
-                for i in args[0]:
+        def add(self, *objects):
+            if type(objects[0]) == tuple or type(objects[0]) == list:
+                for i in objects[0]:
                     self.stuff.append(i)
             else:
-                for i in args:
+                for i in objects:
                     self.stuff.append(i)
 
         def remove(self, *objects):
@@ -424,22 +517,6 @@ class Game:
             elif key in key_up_list:
                 value -= value2 if negative else -value2
             return value
-
-        def key_test(self, key):
-            if key in self.game.keydowns:
-                return 1
-            elif key in self.game.keyups:
-                return -1
-            else:
-                return 0
-
-        def mouse_test(self, button):
-            if button in self.game.mousedowns:
-                return 1
-            elif button in self.game.mouseups:
-                return -1
-            else:
-                return 0
 
         def dist(self, obj1, obj2):
             return (abs(obj1.x - obj2.x) ** 2 + abs(obj1.y - obj2.y) ** 2) ** 0.5
