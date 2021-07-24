@@ -40,22 +40,31 @@ def fit_image(image_res, maximum):
     return round(image_res[0] * y_fac), maximum[1]
 
 
+def calculate_drop_shadow(size, blur):
+    s = Image.new('RGBA', (1, blur))
+    c = Image.new('RGBA', (blur, blur))
+
+    f = Image.new('RGBA', (size[0] + blur * 2, size[1] + blur * 2))
+    f.paste(s.resize((size[0], blur), 1), (blur, 0))
+    f.show()
+
+
+calculate_drop_shadow((960, 540), 300)
+
+
 class Sprite:
-    def __init__(self, img, x, y, scale=1):
+    def __init__(self, img, x, y, scale=1, drop_shadow=0):
         self.img = image_stuff(img, scale)
         self.x = x
         self.y = y
         self.old_rect = pygame.Rect(0, 0, 0, 0)
         self.dim = self.img.get_size()
         self.scale = scale
+        self.drop_shadow = drop_shadow
 
     def update(self, img, scale=1):
         self.img = image_stuff(img, scale)
         self.dim = self.img.get_size()
-
-    def update_location(self, x, y):
-        self.x = x
-        self.y = y
 
     def _draw(self, game, scene, screen, res, erase=False, background=None):
         # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
