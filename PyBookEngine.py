@@ -1,14 +1,20 @@
 import pygame
 import pygame.freetype
-import ctypes
 from copy import copy
-from PIL import Image
+from PIL import Image, ImageFilter, ImageDraw
+from platform import system
 
-PROCESS_PER_MONITOR_DPI_AWARE = 2
-ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
+if system().lower() == 'windows':
+    import ctypes
+
+    PROCESS_PER_MONITOR_DPI_AWARE = 2
+    ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
 
 
 def image_stuff(image, scale=1):
+    if type(image) == pygame.Surface:
+        return image
+
     if type(image) == RectangleImage:
         return pygame.image.fromstring(image.image, (image.width, image.height), 'RGBA')
 
@@ -41,20 +47,27 @@ def fit_image(image_res, maximum):
 
 
 def calculate_drop_shadow(size, blur):
+    # It's broken and weird, whatever, I'll just use the unoptimized method
     s = Image.new('RGBA', (1, blur))
+    s.putpixel((0, blur - 1), (0, 0, 0))
+    s = s.filter(ImageFilter.GaussianBlur(blur // 2))
+    s = s.resize((size[0], blur), 1)
+    # s.show()
+
     c = Image.new('RGBA', (blur, blur))
 
     f = Image.new('RGBA', (size[0] + blur * 2, size[1] + blur * 2))
-    f.paste(s.resize((size[0], blur), 1), (blur, 0))
+    f.paste(s, (blur, 0))
+    f.paste(s.rotate(90), (size[0] - blur, blur))
+    f.paste(s.rotate(180), (blur, size[1] + blur))
+    f.paste(s.rotate(270), (0, blur))
     f.show()
-
-
-calculate_drop_shadow((960, 540), 300)
 
 
 class Sprite:
     def __init__(self, img, x, y, scale=1, drop_shadow=0):
         self.img = image_stuff(img, scale)
+        self._old_img = img
         self.x = x
         self.y = y
         self.old_rect = pygame.Rect(0, 0, 0, 0)
@@ -62,22 +75,28 @@ class Sprite:
         self.scale = scale
         self.drop_shadow = drop_shadow
 
-    def update(self, img, scale=1):
-        self.img = image_stuff(img, scale)
-        self.dim = self.img.get_size()
-
     def _draw(self, game, scene, screen, res, erase=False, background=None):
         # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
         def ny(y):
             return res[1] - y
 
+        self.img = image_stuff(self.img)
+        self.dim = self.img.get_size()
+
         if not erase:
             # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
             # update that region, make the current rectangle the old rectangle (for the next frame)
+            if self.drop_shadow != 0:
+                ds = Image.new('RGBA', (self.dim[0] + self.drop_shadow * 4, self.dim[1] + self.drop_shadow * 4))
+                draw = ImageDraw.Draw(ds)
+                draw.rectangle((self.drop_shadow * 2, self.drop_shadow * 2, self.dim[0] + self.drop_shadow * 2, self.dim[1] + self.drop_shadow * 2), (0, 0, 0))
+                ds = ds.filter(ImageFilter.GaussianBlur(self.drop_shadow))
+                screen.blit(image_stuff(ds), (self.x - self.drop_shadow * 2, ny(self.y + self.dim[1] + self.drop_shadow * 2)))
+
             screen.blit(self.img, (self.x, ny(self.y + self.dim[1])))
         else:
             scene.set_background(background, False)
-        rect = pygame.Rect(self.x - self.dim[0], ny(self.y + self.dim[1]), self.dim[0] * 2, self.dim[1] * 2)
+        rect = pygame.Rect(self.x - self.drop_shadow * 2, ny(self.y) - self.dim[1] - self.drop_shadow * 2, self.dim[0] + self.drop_shadow * 4, self.dim[1] + self.drop_shadow * 4)
         rect2 = pygame.Rect.union(rect, self.old_rect)
         pygame.display.update(rect2)
         self.old_rect = rect
@@ -474,6 +493,9 @@ class Game:
             self.background_center = 0, 0
             self.redraw = False
 
+            self.animations = []
+            self.animation_calls = 0
+
         def set_background(self, background, _update=True):
             if type(background) == pygame.Surface:
                 self.background = background
@@ -485,10 +507,36 @@ class Game:
                 self.background, self.background_center = image_stuff(background, self.game.res)
                 self.game.screen.blit(self.background, self.background_center)
             if _update:
-                pygame.display.flip()
+                self.redraw = True
+
+        def animate(self, start, stop, seconds=1):
+            if len(self.animations) == 0 or self.animations[self.animation_calls][0] != (start, stop, seconds):
+                self.animations.append([(start, stop, seconds), seconds, seconds / (stop - start), start, True])
+                # print('hi')
+
+            # (ID)     time_left     next_milestone     to_return_on_next_milestone     active
+            #  0           1               2                        3                     4
+
+            corresponding = self.animations[self.animation_calls]
+            if corresponding[3] > stop:
+                self.animations[self.animation_calls][4] = False
+            if corresponding[4]:
+                self.animations[self.animation_calls][1] -= self.game.delta
+                to_return = None
+                # print(f'{corresponding[3]}               {corresponding[4]}')
+                if corresponding[1] <= seconds - corresponding[2]:
+                    # print('hey')
+                    to_return = corresponding[3]
+                    self.animations[self.animation_calls][3] += 1
+                    self.animations[self.animation_calls][2] += seconds / (stop - start)
+
+                self.animation_calls += 1
+                if to_return is not None:
+                    return to_return
 
         def run_scene(self):
-            self.update_func()
+            self.animation_calls = 0
+            self.update_func(self.game.delta)
             self.set_background(self.background, False)
 
             if self.redraw:
