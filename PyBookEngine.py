@@ -19,7 +19,7 @@ def image_stuff(image, scale=1):
         return pygame.image.fromstring(image.image, (image.width, image.height), 'RGBA')
 
     if type(image) == str:
-        image = Image.open(image)
+        image = Image.open(image).convert_alpha()
 
     center_info = False
 
@@ -33,8 +33,8 @@ def image_stuff(image, scale=1):
         image = image.resize((round(image.size[0] * scale), round(image.size[1] * scale)))
 
     if not center_info:
-        return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA')
-    return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA'), center_info
+        return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA').convert_alpha()
+    return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA').convert_alpha(), center_info
 
 
 def fit_image(image_res, maximum):
