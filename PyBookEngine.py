@@ -10,6 +10,21 @@ if system().lower() == 'windows':
     PROCESS_PER_MONITOR_DPI_AWARE = 2
     ctypes.windll.shcore.SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE)
 
+# ---------------------------------------------------------------------------------------------
+drop_shadow_high_res = Image.new('RGBA', (800, 800))
+draw = ImageDraw.Draw(drop_shadow_high_res)
+draw.rectangle((200, 200, 600, 600), (0, 0, 0))
+drop_shadow_high_res = drop_shadow_high_res.filter(ImageFilter.GaussianBlur(100))
+drop_shadow_high_res = drop_shadow_high_res.crop((600, 0, 800, 200))
+
+
+# drop_shadow_high_res.save('000aaa_pre_render.png')
+# ---------------------------------------------------------------------------------------------
+
+# drop_shadow_high_res = Image.new('RGBA', (500, 500), (0, 0, 0, 0))
+# drop_shadow_high_res.putpixel((0, 250 - 1), (0, 0, 0))
+# drop_shadow_high_res = drop_shadow_high_res.filter(ImageFilter.GaussianBlur(250 // 2))
+# ---------------------------------------------------------------------------------------------
 
 def image_stuff(image, scale=1):
     if type(image) == pygame.Surface:
@@ -47,21 +62,52 @@ def fit_image(image_res, maximum):
 
 
 def calculate_drop_shadow(size, blur):
-    # It's broken and weird, whatever, I'll just use the unoptimized method
-    s = Image.new('RGBA', (1, blur))
-    s.putpixel((0, blur - 1), (0, 0, 0))
-    s = s.filter(ImageFilter.GaussianBlur(blur // 2))
-    s = s.resize((size[0], blur), 1)
-    # s.show()
-
     c = Image.new('RGBA', (blur, blur))
 
+    # -----------------------------------------------------------------------------------------------------------------
+    # c2 = c.load()
+    # m = blur
+    # m2 = (blur ** 2 + blur ** 2) ** 0.5
+    # factor = 255 / m
+    # for i in range(blur):
+    #     for j in range(blur):
+    #         j = blur - j - 1
+    #         distance = m - (i ** 2 + j ** 2) ** 0.5
+    #         if distance != 0:
+    #             distance = m2 / distance * m2
+    #         distance *= distance
+    #         c2[i, blur - j - 1] = (0, 0, 0, round(distance * factor))
+    # -----------------------------------------------------------------------------------------------------------------
+    # c.putpixel((0, blur - 1), (0, 0, 0))
+    # c = c.filter(ImageFilter.GaussianBlur(blur // 2))
+    # -----------------------------------------------------------------------------------------------------------------
+    c = drop_shadow_high_res.resize((blur, blur))
+    # -----------------------------------------------------------------------------------------------------------------
+    # c.save('0000AAATESTIMAGE3.png')
+
+    sc = c.crop((0, 0, 1, blur))
+    s1 = sc.resize((size[0], blur), 1)
+    s2 = sc.resize((size[1], blur), 1)
+    # s2.save('0000AAATESTIMAGE1.png')
+
     f = Image.new('RGBA', (size[0] + blur * 2, size[1] + blur * 2))
-    f.paste(s, (blur, 0))
-    f.paste(s.rotate(90), (size[0] - blur, blur))
-    f.paste(s.rotate(180), (blur, size[1] + blur))
-    f.paste(s.rotate(270), (0, blur))
-    f.show()
+    f.paste(s1, (blur, 0))
+    f.paste(s2.rotate(-90, expand=True), (size[0] + blur, blur))
+    f.paste(s1.rotate(180), (blur, size[1] + blur))
+    f.paste(s2.rotate(90, expand=True), (0, blur))
+
+    f.paste(c, (size[0] + blur, 0))
+    f.paste(c.rotate(90), (0, 0))
+    f.paste(c.rotate(270), (size[0] + blur, size[1] + blur))
+    f.paste(c.rotate(180), (0, size[1] + blur))
+    # f.show()
+    # f.save('0000AAATESTIMAGE2.png')
+
+    return f
+
+
+# calculate_drop_shadow((200, 200), 50)
+# raise Exception
 
 
 class Sprite:
@@ -72,6 +118,8 @@ class Sprite:
         self.y = y
         self.old_rect = pygame.Rect(0, 0, 0, 0)
         self.dim = self.img.get_size()
+        self.width = self.dim[0]
+        self.height = self.dim[1]
         self.scale = scale
         self.drop_shadow = drop_shadow
 
@@ -82,23 +130,25 @@ class Sprite:
 
         self.img = image_stuff(self.img)
         self.dim = self.img.get_size()
+        self.width, self.height = self.dim[0], self.dim[1]
 
         if not erase:
             # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
             # update that region, make the current rectangle the old rectangle (for the next frame)
             if self.drop_shadow != 0:
-                ds = Image.new('RGBA', (self.dim[0] + self.drop_shadow * 4, self.dim[1] + self.drop_shadow * 4))
-                draw = ImageDraw.Draw(ds)
-                draw.rectangle((self.drop_shadow * 2, self.drop_shadow * 2, self.dim[0] + self.drop_shadow * 2, self.dim[1] + self.drop_shadow * 2), (0, 0, 0))
-                ds = ds.filter(ImageFilter.GaussianBlur(self.drop_shadow))
-                screen.blit(image_stuff(ds), (self.x - self.drop_shadow * 2, ny(self.y + self.dim[1] + self.drop_shadow * 2)))
+                # ds = Image.new('RGBA', (self.dim[0] + self.drop_shadow * 4, self.dim[1] + self.drop_shadow * 4))
+                # draw = ImageDraw.Draw(ds)
+                # draw.rectangle((self.drop_shadow * 2, self.drop_shadow * 2, self.dim[0] + self.drop_shadow * 2, self.dim[1] + self.drop_shadow * 2), (0, 0, 0))
+                # ds = ds.filter(ImageFilter.GaussianBlur(self.drop_shadow))
+                ds = calculate_drop_shadow((self.width, self.height), self.drop_shadow)
+                screen.blit(image_stuff(ds), (self.x - self.drop_shadow, ny(self.y + self.height + self.drop_shadow)))
 
-            screen.blit(self.img, (self.x, ny(self.y + self.dim[1])))
+            screen.blit(self.img, (self.x, ny(self.y + self.height)))
         else:
             scene.set_background(background, False)
-        rect = pygame.Rect(self.x - self.drop_shadow * 2, ny(self.y) - self.dim[1] - self.drop_shadow * 2, self.dim[0] + self.drop_shadow * 4, self.dim[1] + self.drop_shadow * 4)
-        rect2 = pygame.Rect.union(rect, self.old_rect)
-        pygame.display.update(rect2)
+        rect = pygame.Rect(self.x - self.drop_shadow, ny(self.y) - self.height - self.drop_shadow, self.width + self.drop_shadow * 2, self.height + self.drop_shadow * 2)
+        # pygame.draw.rect(screen, (255, 0, 0, 4), pygame.Rect.union(rect, self.old_rect))
+        pygame.display.update(pygame.Rect.union(rect, self.old_rect))
         self.old_rect = rect
 
 
@@ -304,45 +354,38 @@ class Text:
         self.text = text
         self.font = font
         self.font2 = pygame.freetype.Font(font, size)
-        self.fontsurf, self.rect = self.font2.render(text, color, size=size)
-        self.dim = (self.rect.width, self.rect.height)
+        self.font_surf, self.rect = self.font2.render(text, color, size=size)
+        self.dim = self.rect.width, self.rect.height
         self.size = size
         self.color = color
         self.x = x
         self.y = y
-        self.oldrect = pygame.Rect(0, 0, 0, 0)
-        self.updatetext = False
-
-    def update(self):
-        self.oldrect = copy(self.rect)
-        self.font2 = pygame.freetype.Font(self.font, self.size)
-        self.fontsurf, self.rect = self.font2.render(str(self.text), self.color, size=self.size)
-        self.dim = (self.rect.width, self.rect.height)
-        self.updatetext = True
+        self.old_rect = pygame.Rect(0, 0, 0, 0)
+        self.old_text = text
 
     def _draw(self, game, scene, screen, res, erase=False, background=None):
         # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
         def ny(y):
             return res[1] - y
 
+        if self.text != self.old_text:
+            self.font2 = pygame.freetype.Font(self.font, self.size)
+            self.font_surf, self.rect = self.font2.render(str(self.text), self.color, size=self.size)
+            self.dim = self.rect.width, self.rect.height
+
+        draw_y = self.y + self.size
+
         if not erase:
             # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
             # update that region, make the current rectangle the old rectangle (for the next frame)
-            screen.blit(self.fontsurf, (self.x - self.dim[0] // 2, ny(self.y + self.dim[1] // 2)))
-            # print((self.x - self.dim[0] // 2, ny(self.y + self.dim[1] // 2)))
+            screen.blit(self.font_surf, (self.x, ny(draw_y)))
         else:
             screen.fill(background)
-        rect = pygame.Rect(self.x - self.dim[0], ny(self.y + self.dim[1]), self.dim[0] * 2, self.dim[1] * 2)
-        if self.updatetext:
-            rect2 = pygame.Rect.union(rect, self.oldrect)
-            pygame.display.update(rect2)
-            self.updatetext = False
-        else:
-            pygame.display.update(rect)
-
-    def changetext(self, new_text):
-        self.text = new_text
-        self.update()
+        rect = pygame.Rect(self.x, ny(draw_y), self.dim[0], self.dim[1])
+        if self.text != self.old_text:
+            pygame.display.update(pygame.Rect.union(rect, self.old_rect))
+        self.old_text = self.text
+        self.old_rect = copy(self.rect)
 
 
 class Button:
@@ -390,6 +433,8 @@ class Game:
         self.delta = 0
         self._previous_frame_total_ticks = 0
 
+        self.file_paths = None
+
         pygame.init()
         if self.fullscreen:
             if frame:
@@ -418,10 +463,14 @@ class Game:
             t = pygame.time.get_ticks()
             self.input_ups.clear()
             self.input_downs.clear()
+            self.file_paths = None
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.run = False
+
+                if event.type == pygame.DROPFILE:
+                    self.file_paths = str(event.file)
 
                 if event.type == pygame.KEYDOWN:
                     self.input_downs.append(pygame.key.name(event.key))
@@ -483,6 +532,28 @@ class Game:
     def switch_scene(self, scene):
         self.current_scene = scene
         scene.redraw = True
+
+    def constrict_to_screen(self, value, constricted_to, width=0, height=0):
+        def constrict(valueidk, plus, axis=0):
+            if valueidk < 0:
+                return 0
+            elif valueidk + plus > self.res[axis] - 1:
+                return self.res[axis] - 1 - plus
+            return valueidk
+
+        if constricted_to == 'x':
+            if type(value) == int or type(value) == float:
+                return constrict(value, width)
+            return constrict(value.x, value.width)
+        elif constricted_to == 'y':
+            if type(value) == int or type(value) == float:
+                # print(f'constrict({value}, {height}, 1)')
+                return constrict(value, width, 1)
+            return constrict(value.x, value.height, 1)
+
+        if type(value) == int or type(value) == float:
+            return constrict(value, width), constrict(constricted_to, height, 1)
+        return constrict(value.x, value.width), constrict(constricted_to.x, constricted_to.height, 1)
 
     class Scene:
         def __init__(self, game):
@@ -575,5 +646,13 @@ class Game:
                 value -= value2 if negative else -value2
             return value
 
-        def dist(self, obj1, obj2):
-            return (abs(obj1.x - obj2.x) ** 2 + abs(obj1.y - obj2.y) ** 2) ** 0.5
+        def dist(self, obj_1, obj_2):
+            if (type(obj_1) == int or type(obj_1) == float) and (type(obj_2) == int or type(obj_2) == float):
+                return abs(obj_2 - obj_1)
+
+            x1 = obj_1[0] if type(obj_1) == tuple else obj_1.x
+            y1 = obj_1[1] if type(obj_1) == tuple else obj_1.y
+            x2 = obj_2[0] if type(obj_2) == tuple else obj_2.x
+            y2 = obj_2[1] if type(obj_2) == tuple else obj_2.y
+
+            return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
