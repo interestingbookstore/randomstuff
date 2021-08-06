@@ -4,7 +4,7 @@ from sys import argv
 from os import system
 from pathlib import Path
 
-# Version 3.2.1
+# Version 1.2.1
 # -----------------------------------------
 TMP_File_Save_Location = '/tmp'
 Save_Location = str(Path.cwd())  # By default the tmp files and output files are saved in the current working directory.
