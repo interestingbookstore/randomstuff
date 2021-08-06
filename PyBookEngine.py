@@ -52,9 +52,12 @@ def image_stuff(image, scale=1):
     return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA').convert_alpha(), center_info
 
 
-def fit_image(image_res, maximum):
+def fit_image(image_res, maximum, scale_up=True):
     x_fac = maximum[0] / image_res[0]
     y_fac = maximum[1] / image_res[1]
+
+    if not scale_up and x_fac >= 1 and y_fac >= 1:
+        return image_res[0], image_res[1]
 
     if x_fac < y_fac:
         return maximum[0], round(image_res[1] * x_fac)
@@ -361,7 +364,7 @@ class Text:
         self.x = x
         self.y = y
         self.old_rect = pygame.Rect(0, 0, 0, 0)
-        self.old_text = text
+        self.old_text = None
 
     def _draw(self, game, scene, screen, res, erase=False, background=None):
         # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
@@ -416,12 +419,15 @@ class Button:
 
 
 class Game:
-    def __init__(self, res, fps, fullscreen=False, title='Untitled Game', icon=None, frame=True):
+    def __init__(self, resolution, fps, fullscreen=False, title='Untitled Game', icon=None, frame=True, hardware_acceleration=True):
         self.current_scene = None
         self.run = True
-        self.res = res
+        self.default_resolution = resolution
+        self._resolution = self.default_resolution
         self.framerate = fps
         self.fullscreen = fullscreen
+        self.frame = frame
+        self.hardware_acceleration = hardware_acceleration
 
         self.input_downs = []
         self.input_ups = []
@@ -438,14 +444,26 @@ class Game:
         pygame.init()
         if self.fullscreen:
             if frame:
-                self.screen = pygame.display.set_mode(self.res, pygame.FULLSCREEN, pygame.HWSURFACE)
+                if self.hardware_acceleration:
+                    self.screen = pygame.display.set_mode(self._resolution, pygame.FULLSCREEN, pygame.HWSURFACE)
+                else:
+                    self.screen = pygame.display.set_mode(self._resolution, pygame.FULLSCREEN)
             else:
-                self.screen = pygame.display.set_mode(self.res, pygame.FULLSCREEN, pygame.NOFRAME, pygame.HWSURFACE)
+                if self.hardware_acceleration:
+                    self.screen = pygame.display.set_mode(self._resolution, pygame.FULLSCREEN, pygame.NOFRAME, pygame.HWSURFACE)
+                else:
+                    self.screen = pygame.display.set_mode(self._resolution, pygame.FULLSCREEN, pygame.NOFRAME)
         else:
             if frame:
-                self.screen = pygame.display.set_mode(self.res, pygame.HWSURFACE)
+                if self.hardware_acceleration:
+                    self.screen = pygame.display.set_mode(self._resolution, pygame.HWSURFACE)
+                else:
+                    self.screen = pygame.display.set_mode(self._resolution)
             else:
-                self.screen = pygame.display.set_mode(self.res, pygame.NOFRAME, pygame.HWSURFACE)
+                if self.hardware_acceleration:
+                    self.screen = pygame.display.set_mode(self._resolution, pygame.NOFRAME, pygame.HWSURFACE)
+                else:
+                    self.screen = pygame.display.set_mode(self._resolution, pygame.NOFRAME)
         self.clock = pygame.time.Clock()
 
         pygame.display.set_caption(title)
@@ -454,9 +472,26 @@ class Game:
         self.display_resolution = self.screen.get_size()
 
     def ny(self, y):
-        return self.res[1] - y
+        return self._resolution[1] - y
+
+    def change_resolution(self, to):
+        self._resolution = to
+        if self.fullscreen:
+            if self.frame:
+                self.screen = pygame.display.set_mode(self._resolution, pygame.FULLSCREEN, pygame.HWSURFACE)
+            else:
+                self.screen = pygame.display.set_mode(self._resolution, pygame.FULLSCREEN, pygame.NOFRAME, pygame.HWSURFACE)
+        else:
+            if self.frame:
+                self.screen = pygame.display.set_mode(self._resolution, pygame.HWSURFACE)
+            else:
+                self.screen = pygame.display.set_mode(self._resolution, pygame.NOFRAME, pygame.HWSURFACE)
 
     def run_game(self):
+        self.run = True
+        # if self.current_scene is None:
+        #     self.current_scene = self.sce
+
         mouse = pygame.mouse
         while self.run:
             self.clock.tick(self.framerate)
@@ -485,7 +520,7 @@ class Game:
 
                 if event.type == pygame.MOUSEMOTION:
                     position = mouse.get_pos()
-                    self.mouse_position = (position[0], self.res[1] - position[1])
+                    self.mouse_position = (position[0], self._resolution[1] - position[1])
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     pressed = mouse.get_pressed(3)
                     if pressed[0]:
@@ -537,8 +572,8 @@ class Game:
         def constrict(valueidk, plus, axis=0):
             if valueidk < 0:
                 return 0
-            elif valueidk + plus > self.res[axis] - 1:
-                return self.res[axis] - 1 - plus
+            elif valueidk + plus > self._resolution[axis] - 1:
+                return self._resolution[axis] - 1 - plus
             return valueidk
 
         if constricted_to == 'x':
@@ -560,12 +595,16 @@ class Game:
             self.game = game
             self.stuff = []
             self.update_func = do_nothing
+            self.resolution = game.default_resolution
             self.background = 0, 0, 0
             self.background_center = 0, 0
             self.redraw = False
 
             self.animations = []
             self.animation_calls = 0
+
+        def clear(self):
+            self.stuff = []
 
         def set_background(self, background, _update=True):
             if type(background) == pygame.Surface:
@@ -575,7 +614,7 @@ class Game:
                 self.background = background
                 self.game.screen.fill(self.background)
             else:
-                self.background, self.background_center = image_stuff(background, self.game.res)
+                self.background, self.background_center = image_stuff(background, self.game._resolution)
                 self.game.screen.blit(self.background, self.background_center)
             if _update:
                 self.redraw = True
@@ -606,6 +645,9 @@ class Game:
                     return to_return
 
         def run_scene(self):
+            if self.resolution != self.game._resolution:
+                self.game.change_resolution(self.resolution)
+
             self.animation_calls = 0
             self.update_func(self.game.delta)
             self.set_background(self.background, False)
@@ -615,7 +657,7 @@ class Game:
                 self.redraw = False
 
             for i in self.stuff:
-                i._draw(self.game, self, self.game.screen, self.game.res)
+                i._draw(self.game, self, self.game.screen, self.game._resolution)
 
         def game_update(self, func):
             self.update_func = func
