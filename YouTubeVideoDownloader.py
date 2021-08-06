@@ -4,8 +4,9 @@ from sys import argv
 from os import system
 from pathlib import Path
 
+# Version 3.2.1
 # -----------------------------------------
-TMP_File_Save_Location = '/.tmp'
+TMP_File_Save_Location = '/tmp'
 Save_Location = str(Path.cwd())  # By default the tmp files and output files are saved in the current working directory.
 #     (No slash at the end!!)      Simply edit this line if you'd like to save them somewhere else.
 
@@ -209,7 +210,7 @@ else:
     downloading = 'audio'
     audio.download(output_path=TMP_File_Save_Location, filename='tmp_download_audio')
 
-    system(f'ffmpeg -loglevel warning -i "{TMP_File_Save_Location}/tmp_download_video.{v_extension}" -i "{TMP_File_Save_Location}/tmp_download_audio.{a_extension}" -c copy "{Save_Location}/{name}.mp4"')
+    system(f'ffmpeg -loglevel warning -i "{TMP_File_Save_Location}/tmp_download_video" -i "{TMP_File_Save_Location}/tmp_download_audio" -c copy "{Save_Location}/{name}.mp4"')
 
 print(c.green + '=' * 80)
 print(c.reset + f'Video downloaded as {c.bold}{c.red}{name}.mp4{c.reset} at {c.bold}{Save_Location}/{name}.mp4')
