@@ -1,39 +1,46 @@
 from PyBookEngine import *
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageGrab
 from pathlib import Path
 
-# Version 1.0
+# Version 1.1 BETA 1
 # -----  Options  ----------------------------------------------------------------------------------------------
 maximum_resolution = 1820, 980
 scale_up_image = False
 minimum_resolution = 960, 540  # If the variable above is "False", and the image is fully smaller than this resolution, the image will be scaled up to this resolution. Set to say, "0, 0" to disable.
-background_blur_amount = 2
+scaling_widget_radius = 80
+background_blur_amount = 4
 background_reduced_brightness_multiplier = 2
-background_blur_animation = True
+background_blur_animation = False
 background_blur_animation_length = 1
 background_blur_animation_frames_per_second = 20
-image_drop_shadow_size = 40
-save_file_path = f'{str(Path.home())}/Downloads/\name-cropped.png'  # "\name" is replaced with the name of the image file
-hardware_acceleration = True
+image_drop_shadow_size = 0
+save_file_path = f'{str(Path.home())}/Downloads///name-cropped.png'  # "//name" is replaced with the name of the image file
+clipboard_image_name = 'untitled_image'  # If you paste in an image (Windows and MacOS only, sorry... :( ), its "name" (used in the output filename) will be this string.
 # --------------------------------------------------------------------------------------------------------------
 
-g = Game(maximum_resolution, 60, False, 'Image Cropping Tool', hardware_acceleration=hardware_acceleration)
+g = Game(maximum_resolution, 60, False, 'Image Cropping Tool')
 
 s = g.Scene(g)
 g.current_scene = s
 
 
-def setup_new_image(path):
-    global im, im2, scaling, resx, resy, im_path
+def setup_new_image(path_or_image):
+    global im, im2, scaling, resx, resy, im_name
     global first_time, final_image, selection_start, points, blur_step_images
     global move_distance_start, move_distance_x, move_distance_y, move_distance_width, move_distance_height, crop_x, crop_y, crop_w, crop_h, moving
     global g, s, t
 
     s.clear()
 
-    im_path = path
+    if type(path_or_image) == str:
+        im_name = path_or_image.replace('\\', '/').split('/')[-1].split('.')[0]
+        im = Image.open(path_or_image)
+    else:
+        im_name = clipboard_image_name
+        im = path_or_image
 
-    im = Image.open(path)
+    g.title = im_name
+
     if not scale_up_image and im.size[0] < minimum_resolution[0] and im.size[1] < minimum_resolution[1]:
         im2 = im.resize(fit_image(im.size, minimum_resolution))
     else:
@@ -67,24 +74,29 @@ def setup_new_image(path):
 
     g.current_scene = s
     s.add(final_image)
-    t = Text('', 'Roboto-Regular.ttf', 15, (255, 255, 255), resx - 100, 5)
+    t = Text('', 'Roboto-Regular.ttf', 15, (255, 255, 255), resx - 100, 30, 'center')
     s.add(t)
 
 
 def lower_brightness(image, amount):
     source = image.split()
-    r = source[0].point(lambda i: i / amount)
-    g = source[1].point(lambda i: i / amount)
-    b = source[2].point(lambda i: i / amount)
+    r = source[0].point(lambda i: i / amount + 20)
+    g = source[1].point(lambda i: i / amount + 20)
+    b = source[2].point(lambda i: i / amount + 20)
     return Image.merge('RGB', (r, g, b))
+
+
+old_x = 0
+old_y = 0
+old_w = 0
+old_h = 0
 
 
 def crop_normal_image(x=None, y=None, w=None, h=None):
     global final_image
-    global crop_x
-    global crop_y
-    global crop_w
-    global crop_h
+    global crop_x, crop_y, crop_w, crop_h
+    global old_x, old_y, old_w, old_h
+    global moving
 
     if x is None:
         x = final_image.x
@@ -102,37 +114,67 @@ def crop_normal_image(x=None, y=None, w=None, h=None):
         h *= -1
         y -= h
 
-    if w != 0 and h != 0:
-        im3 = im2.crop((x, resy - y - h, x + w, resy - y))
-        final_image.img = im3
+    if (x != old_x) or (y != old_y) or (w != old_w) or (h != old_h):
+        old_x, old_y, old_w, old_h = x, y, w, h
+
+        x, w = g.constrict_to_screen(x, 'x', w, scale=True)
+        y, h = g.constrict_to_screen(y, 'y', h, scale=True)
+
+        if w != 0 and h != 0:
+            if final_image not in s:
+                s.add(final_image, position=0)
+
+            im3 = im2.crop((x, resy - y - h, x + w, resy - y))
+            final_image.img = im3
+        else:
+            if final_image in s:
+                s.remove(final_image)
+
         final_image.x = x
         final_image.y = y
 
-        crop_x = x // scaling
-        crop_y = y // scaling
-        crop_w = w // scaling
-        crop_h = h // scaling
+        if (final_image.width + 1) // scaling > im.size[0]:
+            crop_x = 0
+            crop_w = im.size[0]
+        else:
+            crop_x = round(x / scaling)
+            if w != 0:
+                crop_w = round(w / scaling)
+            else:
+                crop_w = 0
+        if (final_image.height + 1) // scaling > im.size[1]:
+            crop_y = 0
+            crop_h = im.size[1]
+        else:
+            crop_y = round(y / scaling)
+            if h != 0:
+                crop_h = round(h / scaling)
+            else:
+                crop_h = 0
 
 
 very_first_time_screen = True
-s.set_background((20, 22, 27))
-info_text = Text('Drag an image file into this window', 'Roboto-Medium.ttf', 30, (255, 255, 255, 150), maximum_resolution[0] // 2 - 230, maximum_resolution[1] // 2 - 15)
+s.background = 30, 32, 35
+info_text_extra = 'or paste an image in with ctrl-v' if g.os != 'linux' else ''
+info_text = Text(f'Drag an image file into this window {info_text_extra}', 'Roboto-Medium.ttf', 30, (255, 255, 255, 150), maximum_resolution[0] // 2, maximum_resolution[1] // 2, 'center')
 s.add(info_text)
 
 
 @s.game_update
 def game_update(delta):
-    global first_time
-    global selection_start
-    global points
-    global move_distance_start
-    global move_distance_x
-    global move_distance_y
-    global move_distance_width
-    global move_distance_height
-    global moving
-    global move_snap
+    global first_time, selection_start, points, move_distance_start
+    global move_distance_x, move_distance_y, move_distance_width, move_distance_height, moving
     global very_first_time_screen
+
+    if not very_first_time_screen:
+        t.text = ''
+
+    if g.os != 'linux':
+        if g.is_pressed('left ctrl'):
+            if g.just_pressed('v') == 1:
+                setup_new_image(''.join(ImageGrab.grabclipboard()))
+                if very_first_time_screen:
+                    very_first_time_screen = False
 
     if very_first_time_screen:
         if g.file_paths is not None:
@@ -142,32 +184,38 @@ def game_update(delta):
         if g.file_paths is not None:
             setup_new_image(g.file_paths)
 
+        if g.just_pressed('left') == -1 and first_time:
+            pass
+            first_time = False
+            t.text = ''
+
         if g.just_pressed('left') and first_time:
             if not background_blur_animation:
                 amount = round(background_blur_animation_frames_per_second * background_blur_animation_length)
-                s.set_background(lower_brightness(im2, background_reduced_brightness_multiplier * (20 / background_blur_animation_frames_per_second) * amount / 10 / background_blur_animation_length + 1)
-                                 .filter(ImageFilter.GaussianBlur(round(background_blur_amount * (maximum_resolution[0] * maximum_resolution[1] / 3000000) * amount * (20 / background_blur_animation_frames_per_second) / background_blur_animation_length))))
+                s.background = lower_brightness(im2, background_reduced_brightness_multiplier * (20 / background_blur_animation_frames_per_second) * amount / 10 / background_blur_animation_length + 1) \
+                    .filter(ImageFilter.GaussianBlur(round(background_blur_amount * (maximum_resolution[0] * maximum_resolution[1] / 3000000) * amount * (20 / background_blur_animation_frames_per_second) / background_blur_animation_length)))
             selection_start = g.mouse_position
-        if g.is_pressed('left') and (first_time or first_time == -1):
-            first_time = -1
 
+        if g.just_pressed('right') and not first_time:
+            selection_start = g.mouse_position
+
+        if (g.is_pressed('left') and (first_time or first_time == -1)) or (g.is_pressed('right') and not first_time):
             if background_blur_animation:
                 if g_amount := s.animate(0, round(background_blur_animation_frames_per_second * background_blur_animation_length) - 1, background_blur_animation_length):
-                    s.set_background(blur_step_images[g_amount])
+                    s.background = blur_step_images[g_amount]
 
             precise = 1
-            snap = 1
             reflect = False
 
-            if g.is_pressed('left shift'):
-                precise = 0.5
-            if g.is_pressed('left ctrl'):
-                snap = 10
-            if g.is_pressed('left alt'):
+            if g.is_pressed('left shift') or g.is_pressed('right shift'):
+                precise *= 0.5
+            if g.is_pressed('left ctrl') or g.is_pressed('right ctrl'):
+                precise *= 0.5
+            if g.is_pressed('left alt') or g.is_pressed('right alt'):
                 reflect = True
 
-            distance_x = round((g.mouse_position[0] - selection_start[0]) * precise / snap) * snap
-            distance_y = round((g.mouse_position[1] - selection_start[1]) * precise / snap) * snap
+            distance_x = round((g.mouse_position[0] - selection_start[0]) * precise)
+            distance_y = round((g.mouse_position[1] - selection_start[1]) * precise)
             if not reflect:
                 crop_normal_image(selection_start[0], selection_start[1], distance_x, distance_y)
             else:
@@ -175,33 +223,44 @@ def game_update(delta):
 
             t.text = f'{final_image.width}, {final_image.height}'
 
-        elif first_time == -1:
-            first_time = False
-            points = [(selection_start[0], selection_start[1])]
-            t.text = ''
-
         if not first_time:
             if g.just_pressed('return') == -1:
-                name = im_path.split('/')[-1].split('.')[0]
-                im.crop((crop_x, im.size[1] - crop_y - crop_h, crop_x + crop_w, im.size[1] - crop_y)).save(save_file_path.replace('\name', name))
+                if crop_w != 0 and crop_h != 0:
+                    name = im_name
+
+                    save_path = save_file_path.replace('//name', name)
+
+                    if Path(save_path).is_file():
+                        filename = '.'.join(save_path.split('.')[:-1])
+                        extension = '.' + save_path.split('.')[-1]
+
+                        filename_addition = ' (*)'
+
+                        num = 1
+                        while Path(filename + filename_addition.replace('*', str(num)) + extension).is_file():
+                            num += 1
+
+                        save_path = filename + filename_addition.replace('*', str(num)) + extension
+
+                    im.crop((crop_x, im.size[1] - crop_y - crop_h, crop_x + crop_w, im.size[1] - crop_y)).save(save_path)
 
             if g.just_pressed('left') == 1:
                 do_stuff = True
-                if s.dist(g.mouse_position, (final_image.x, final_image.y)) <= 60:
+                if s.square_distance(g.mouse_position, (final_image.x, final_image.y), scaling_widget_radius):
                     moving = 1  # Bottom-left
-                elif s.dist(g.mouse_position, (final_image.x + final_image.width, final_image.y)) <= 60:
+                elif s.square_distance(g.mouse_position, (final_image.x + final_image.width, final_image.y), scaling_widget_radius):
                     moving = 3  # Bottom-right
-                elif s.dist(g.mouse_position, (final_image.x, final_image.y + final_image.height)) <= 60:
+                elif s.square_distance(g.mouse_position, (final_image.x, final_image.y + final_image.height), scaling_widget_radius):
                     moving = 6  # Top-left
-                elif s.dist(g.mouse_position, (final_image.x + final_image.width, final_image.y + final_image.height)) <= 60:
+                elif s.square_distance(g.mouse_position, (final_image.x + final_image.width, final_image.y + final_image.height), scaling_widget_radius):
                     moving = 8  # Top-right
-                elif (final_image.x <= g.mouse_position[0] <= final_image.x + final_image.width) and s.dist(g.mouse_position[1], final_image.y) <= 60:
+                elif (final_image.x <= g.mouse_position[0] <= final_image.x + final_image.width) and s.dist(g.mouse_position[1], final_image.y) <= scaling_widget_radius:
                     moving = 2  # Bottom
-                elif s.dist(g.mouse_position[0], final_image.x) <= 60 and (final_image.y <= g.mouse_position[1] <= final_image.y + final_image.height):
+                elif s.dist(g.mouse_position[0], final_image.x) <= scaling_widget_radius and (final_image.y <= g.mouse_position[1] <= final_image.y + final_image.height):
                     moving = 4  # Left
-                elif s.dist(g.mouse_position[0], final_image.x + final_image.width) <= 60 and (final_image.y <= g.mouse_position[1] <= final_image.y + final_image.height):
+                elif s.dist(g.mouse_position[0], final_image.x + final_image.width) <= scaling_widget_radius and (final_image.y <= g.mouse_position[1] <= final_image.y + final_image.height):
                     moving = 5  # Right
-                elif (final_image.x <= g.mouse_position[0] <= final_image.x + final_image.width) and s.dist(g.mouse_position[1], final_image.y + final_image.height) <= 60:
+                elif (final_image.x <= g.mouse_position[0] <= final_image.x + final_image.width) and s.dist(g.mouse_position[1], final_image.y + final_image.height) <= scaling_widget_radius:
                     moving = 7  # Top
                 elif (final_image.x <= g.mouse_position[0] <= final_image.x + final_image.width) and (final_image.y <= g.mouse_position[1] <= final_image.y + final_image.height):
                     moving = 9  # Area
@@ -227,13 +286,13 @@ def game_update(delta):
                     move_distance_x2 = move_distance_x
                     move_distance_y2 = move_distance_y
 
-                    if g.is_pressed('left shift'):
-                        distance_x = distance_x // 2
-                        distance_y = distance_y // 2
-                    if g.is_pressed('left ctrl'):
-                        distance_x = round(distance_x / 10) * 10 + (10 - int(str(move_distance_width)[-1]))
-                        distance_y = round(distance_y / 10) * 10 + (10 - int(str(move_distance_height)[-1]))
-                    if g.is_pressed('left alt'):
+                    if g.is_pressed('left shift') or g.is_pressed('right shift'):
+                        distance_x = round(distance_x / 2)
+                        distance_y = round(distance_y / 2)
+                    if g.is_pressed('left ctrl') or g.is_pressed('right ctrl'):
+                        distance_x = round(distance_x / 2)
+                        distance_y = round(distance_y / 2)
+                    if g.is_pressed('left alt') or g.is_pressed('right alt'):
                         move_distance_x2 -= distance_x
                         move_distance_y2 -= distance_y
                         distance_x *= 2
@@ -260,9 +319,7 @@ def game_update(delta):
                         show_dimensions = False
 
                     if show_dimensions:
-                        t.text = f'{final_image.width}, {final_image.height}'
-            else:
-                t.text = ''
+                        t.text = f'{crop_w}, {crop_h}'
 
 
 g.run_game()
