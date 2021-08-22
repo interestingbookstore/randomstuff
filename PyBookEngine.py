@@ -1,7 +1,6 @@
 import pygame
 import pygame.freetype
-from copy import copy
-from PIL import Image, ImageFilter, ImageDraw
+from PIL import Image, ImageFilter, ImageDraw, ImageDraw, ImageFont
 from platform import system
 
 if system().lower() == 'windows':
@@ -30,11 +29,8 @@ def image_stuff(image, scale=1):
     if type(image) == pygame.Surface:
         return image
 
-    if type(image) == RectangleImage:
-        return pygame.image.fromstring(image.image, (image.width, image.height), 'RGBA')
-
     if type(image) == str:
-        image = Image.open(image).convert_alpha()
+        image = Image.open(image).convert()
 
     center_info = False
 
@@ -116,306 +112,117 @@ def calculate_drop_shadow(size, blur):
 class Sprite:
     def __init__(self, img, x, y, scale=1, drop_shadow=0):
         self.img = image_stuff(img, scale)
-        self._old_img = img
         self.x = x
         self.y = y
-        self.old_rect = pygame.Rect(0, 0, 0, 0)
+        self.old_rect = 0, 0, 0, 0
         self.dim = self.img.get_size()
         self.width = self.dim[0]
         self.height = self.dim[1]
         self.scale = scale
         self.drop_shadow = drop_shadow
 
-    def _draw(self, game, scene, screen, res, erase=False, background=None):
-        # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
-        def ny(y):
-            return res[1] - y
+        self._update_area = True
 
-        self.img = image_stuff(self.img)
-        self.dim = self.img.get_size()
-        self.width, self.height = self.dim[0], self.dim[1]
+    def _draw(self, game):
+        if not isinstance(self.img, pygame.Surface):
+            self.img = image_stuff(self.img)
+            self.dim = self.img.get_size()
+            self.width, self.height = self.dim[0], self.dim[1]
+            self._update_area = True
 
-        if not erase:
-            # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
-            # update that region, make the current rectangle the old rectangle (for the next frame)
-            if self.drop_shadow != 0:
-                # ds = Image.new('RGBA', (self.dim[0] + self.drop_shadow * 4, self.dim[1] + self.drop_shadow * 4))
-                # draw = ImageDraw.Draw(ds)
-                # draw.rectangle((self.drop_shadow * 2, self.drop_shadow * 2, self.dim[0] + self.drop_shadow * 2, self.dim[1] + self.drop_shadow * 2), (0, 0, 0))
-                # ds = ds.filter(ImageFilter.GaussianBlur(self.drop_shadow))
-                ds = calculate_drop_shadow((self.width, self.height), self.drop_shadow)
-                screen.blit(image_stuff(ds), (self.x - self.drop_shadow, ny(self.y + self.height + self.drop_shadow)))
+        # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
+        # update that region, make the current rectangle the old rectangle (for the next frame)
+        if self.drop_shadow != 0:
+            # ds = Image.new('RGBA', (self.dim[0] + self.drop_shadow * 4, self.dim[1] + self.drop_shadow * 4))
+            # draw = ImageDraw.Draw(ds)
+            # draw.rectangle((self.drop_shadow * 2, self.drop_shadow * 2, self.dim[0] + self.drop_shadow * 2, self.dim[1] + self.drop_shadow * 2), (0, 0, 0))
+            # ds = ds.filter(ImageFilter.GaussianBlur(self.drop_shadow))
+            ds = calculate_drop_shadow((self.width, self.height), self.drop_shadow)
+            game.blit_image(image_stuff(ds), self.x - self.drop_shadow, self.y - self.drop_shadow, self.height)
+            # screen.blit(image_stuff(ds), (self.x - self.drop_shadow, ny(self.y + self.height + self.drop_shadow)))
 
-            screen.blit(self.img, (self.x, ny(self.y + self.height)))
-        else:
-            scene.set_background(background, False)
-        rect = pygame.Rect(self.x - self.drop_shadow, ny(self.y) - self.height - self.drop_shadow, self.width + self.drop_shadow * 2, self.height + self.drop_shadow * 2)
-        # pygame.draw.rect(screen, (255, 0, 0, 4), pygame.Rect.union(rect, self.old_rect))
-        pygame.display.update(pygame.Rect.union(rect, self.old_rect))
-        self.old_rect = rect
+        game.blit_image(self.img, self.x, self.y, self.height)
+        # screen.blit(self.img, (self.x, ny(self.y + self.height)))
+        # else:
+        #     pass
+        # rect = pygame.Rect(self.x - self.drop_shadow, ny(self.y) - self.height - self.drop_shadow, self.width + self.drop_shadow * 2, self.height + self.drop_shadow * 2)
+        # if update:
+        #     pygame.display.update(pygame.Rect.union(rect, self.old_rect))
+        # self.old_rect = rect
 
-
-class Line:
-    def __init__(self, point_1, point_2, color=(255, 255, 255), thickness=1):
-        self.p1 = point_1
-        self.p2 = point_2
-        self.color = color
-        self.thickness = thickness
-        self.old_rect = pygame.Rect(0, 0, 0, 0)
-
-    def _draw(self, game, scene, screen, res, erase=False, background=None):
-        # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
-        def ny(y):
-            if type(y) == tuple:
-                return y[0], res[1] - y[1]
-            return res[1] - y
-
-        if not erase:
-            # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
-            # update that region, make the current rectangle the old rectangle (for the next frame)
-            pygame.draw.line(screen, self.color, ny(self.p1), ny(self.p2), self.thickness)
-        else:
-            scene.set_background(background, False)
-        x_dis = self.p2[0] - self.p1[0]
-        y_dis = ny(self.p2[1] - self.p1[1])
-        if x_dis > 0:
-            left = self.p1[0]
-        else:
-            left = self.p2[0]
-        if y_dis > 0:
-            top = ny(self.p2[1])
-        else:
-            top = ny(self.p1[1])
-
-        rect = pygame.Rect(left - self.thickness, top - self.thickness, abs(x_dis) + self.thickness, abs(y_dis) + self.thickness)
-        pygame.draw.rect(screen, (255, 0, 0), rect)
-        rect2 = pygame.Rect.union(rect, self.old_rect)
-        pygame.display.update(rect2)
-        self.old_rect = rect
+    def _update(self, game, erase=False):
+        if self._update_area or erase:
+            game.update_screen(self.x, self.y, self.width, self.height, self.old_rect)
+            self.old_rect = self.x, self.y, self.width, self.height
+            self._update_area = False
 
 
-class Rectangle:
-    def __init__(self, x, y, width, height, color=(255, 255, 255), outline_thickness=None, rounded_corners=None):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.color = color
-        self.outline_thickness = outline_thickness
-        self.rounded_corners = rounded_corners
-        self.old_rect = pygame.Rect(0, 0, 0, 0)
-
-    def _draw(self, game, scene, screen, res, erase=False, background=None):
-        def ny(y):
-            return res[1] - y
-
-        outline_thickness = self.outline_thickness if self.outline_thickness is not None else 1
-        rounded_corners = self.rounded_corners if self.rounded_corners is not None else 1
-
-        x = self.x
-        width = self.width
-        if width < 0:
-            width *= -1
-            x -= width - outline_thickness
-        y = self.y
-        height = self.height
-        if height < 0:
-            height *= -1
-            y -= height - outline_thickness
-
-        rect = pygame.Rect(x, ny(y) - height, width, height)
-        update_rect = pygame.Rect(x - outline_thickness // 2, ny(y) - height - outline_thickness // 2, width + outline_thickness + 5, height + outline_thickness + 5)
-        pygame.draw.rect(screen, self.color, rect, outline_thickness, rounded_corners)
-        pygame.display.update(pygame.Rect.union(update_rect, self.old_rect))
-        self.old_rect = update_rect
-
-
-def do_nothing():
+def do_nothing(*idk):
     pass
 
 
-class RectangleImage:
-    def __init__(self, width, height, color):
-        self.width = width
-        self.height = height
-        self.image = Image.new('RGBA', (width, height), color).tobytes('raw', 'RGBA')
-
-
-class GameObject:
-    def __init__(self, img, x, y, movement_speed, scale=1, speedcap=None, drag=None, borders=(True, True, True, True), resetcol=False, xc=0, yc=0, xc2=0, yc2=0):
-        self.img = Sprite(img, x, y, scale)
-        self.movement_speed = movement_speed
-        self.speedcap = speedcap
-        self.drag = drag
-        self.x = x
-        self.y = y
-        self.xc = xc
-        self.yc = yc
-        self.xc2 = xc2
-        self.yc2 = yc2
-        self.dim = self.img.dim
-        self.movedir = [0, 0]
-        self.bordercollision = borders
-        self.collided = [False, False, False, False]
-        self.resetcol = resetcol
-
-    def update(self, img, scale=1):
-        self.img.update(img, scale)
-
-    def _draw(self, game, scene, screen, res, erase=False, background=None):
-        # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
-        def ny(y):
-            return res[1] - y
-
-        if not erase:
-            # Add the acceleration to the current speed
-            self.xc += self.xc2
-            self.yc += self.yc2
-
-            # Prevent the sprite from surpassing the speed-cap
-            if self.speedcap is not None:
-                if self.xc > self.speedcap:
-                    self.xc = self.speedcap
-                elif self.xc < -self.speedcap:
-                    self.xc = -self.speedcap
-                if self.yc > self.speedcap:
-                    self.yc = self.speedcap
-                elif self.yc < -self.speedcap:
-                    self.yc = -self.speedcap
-
-            # Reset the values if the sprite isn't moving, or if it is, figure out which way the sprite is moving
-            if self.xc == 0:
-                self.movedir[0] = 0
-            if self.yc == 0:
-                self.movedir[1] = 0
-
-            if self.xc < 0:
-                self.movedir[0] = 1
-            elif self.xc > 0:
-                self.movedir[0] = -1
-            if self.yc > 0:
-                self.movedir[1] = 1
-            elif self.yc < 0:
-                self.movedir[1] = -1
-
-            # Slow the player down with a constant drag force
-            if self.drag is not None:
-                if self.movedir[0] == 1:
-                    self.xc += self.drag
-                elif self.movedir[0] == -1:
-                    self.xc -= self.drag
-                if self.movedir[1] == 1:
-                    self.yc -= self.drag
-                elif self.movedir[1] == -1:
-                    self.yc += self.drag
-
-            # Prevent the player from infinitely moving if drag isn't a factor of the current speed (xc, yc)
-            if self.drag is not None:
-                if 0 < abs(self.xc) < self.drag:
-                    self.xc = 0
-                elif 0 < abs(self.yc) < self.drag:
-                    self.yc = 0
-
-            # Apply velocity (xc, yc) to position (x, y)
-            self.x += self.xc
-            self.y += self.yc
-
-            # Prevent the sprite from exiting the window, and cancel their velocity if they collide from the inside
-            # (velocity is maintained if the sprite is teleported from the outside)
-            self.collided = [False, False, False, False]
-
-            if self.bordercollision[1]:
-                if self.x - self.dim[0] // 2 <= 0:
-                    if self.resetcol and self.movedir[0] == 1:
-                        self.xc = 0
-                    self.x = 0 + self.dim[0] // 2
-                    self.collided[1] = True
-            if self.bordercollision[2]:
-                if self.x + self.dim[0] // 2 >= res[0]:
-                    if self.resetcol and self.movedir[0] == -1:
-                        self.xc = 0
-                    self.x = res[0] - self.dim[0] // 2
-                    self.collided[2] = True
-            if self.bordercollision[0]:
-                if self.y <= 0:
-                    if self.resetcol and self.movedir[1] == -1:
-                        self.yc = 0
-                    self.y = 0
-                    self.collided[0] = True
-            if self.bordercollision[3]:
-                if self.y >= res[1]:
-                    if self.resetcol and self.movedir[1] == 1:
-                        self.yc = 0
-                    self.y = res[1]
-                    self.collided[3] = True
-        self.img.updatelocation(self.x, self.y)
-        self.img.draw(game, scene, screen, res, erase, background)
-
-
 class Text:
-    def __init__(self, text, font, size, color, x, y):
+    def __init__(self, text, font, size, color, x, y, align='bottom left'):
         self.text = text
         self.font = font
         self.font2 = pygame.freetype.Font(font, size)
         self.font_surf, self.rect = self.font2.render(text, color, size=size)
         self.dim = self.rect.width, self.rect.height
+        self.width, self.height = self.dim[0], self.dim[1]
         self.size = size
         self.color = color
-        self.x = x
-        self.y = y
-        self.old_rect = pygame.Rect(0, 0, 0, 0)
+        self.x, self.y = x, y
+        self.align = align
+        self.old_rect = 0, 0, 0, 0
         self.old_text = None
+        self.x_offset = 0
+        self.y_offset = 0
 
-    def _draw(self, game, scene, screen, res, erase=False, background=None):
-        # Flips a y coordinate vertically (since Pygame uses top-left as the origin)
-        def ny(y):
-            return res[1] - y
-
+    def _draw(self, game):
         if self.text != self.old_text:
             self.font2 = pygame.freetype.Font(self.font, self.size)
             self.font_surf, self.rect = self.font2.render(str(self.text), self.color, size=self.size)
-            self.dim = self.rect.width, self.rect.height
+            self.font_surf = self.font_surf.convert_alpha()
+            self.dim = self.font_surf.get_size()
+            self.width, self.height = self.dim[0], self.dim[1]
 
-        draw_y = self.y + self.size
-
-        if not erase:
-            # Blit the image, calculate a rectangle around it to update, merge it with the older rectangle (to erase the previous frame),
-            # update that region, make the current rectangle the old rectangle (for the next frame)
-            screen.blit(self.font_surf, (self.x, ny(draw_y)))
+        if self.align == 'top left':
+            self.x_offset = -self.width
+            self.y_offset = 0
+        elif self.align == 'top':
+            self.x_offset = -self.width // 2
+        elif self.align == 'top right':
+            self.x_offset = 0
+            self.y_offset = 0
+        elif self.align == 'left':
+            self.x_offset = -self.width
+            self.y_offset = -self.height // 2
+        elif self.align == 'center':
+            self.x_offset = -self.width // 2
+            self.y_offset = -self.height // 2
+        elif self.align == 'right':
+            self.x_offset = 0
+            self.y_offset = -self.height // 2
+        elif self.align == 'bottom left':
+            self.x_offset = -self.width
+            self.y_offset = -self.height
+        elif self.align == 'bottom':
+            self.x_offset = -self.width // 2
+            self.y_offset = self.height
+        elif self.align == 'bottom right':
+            self.x_offset = 0
+            self.y_offset = self.height
         else:
-            screen.fill(background)
-        rect = pygame.Rect(self.x, ny(draw_y), self.dim[0], self.dim[1])
-        if self.text != self.old_text:
-            pygame.display.update(pygame.Rect.union(rect, self.old_rect))
-        self.old_text = self.text
-        self.old_rect = copy(self.rect)
+            raise Exception(f'Alignments can be "left", "center", or "right", but {self.align} given')
 
+        game.blit_image(self.font_surf, self.x + self.x_offset, self.y + self.y_offset, self.height)
 
-class Button:
-    def __init__(self, x, y, width, height, color):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.color = color
-        self.sprite = Sprite(Rectangle(self.width, self.height, self.color), self.x, self.y, 0, 1)
-        self.pressed = False
-
-    def _draw(self, game, scene, screen, res):
-        status = scene.mouse_test('left')
-        if status == 1:
-            if self.x - round(self.width / 2) <= game.mouseposition[0] <= self.x + round(self.width / 2) and self.y - round(self.width / 2) <= game.mouseposition[1] <= self.y + round(self.height / 2):
-                self.pressed = True
-        elif status == -1:
-            self.pressed = False
-
-        if self.pressed:
-            self.sprite.img = Rectangle(self.width, self.height, tuple([i - 50 for i in self.color]))
-            self.sprite.update()
-        else:
-            self.sprite.img = Rectangle(self.width, self.height, self.color)
-            self.sprite.update()
-        self.sprite.draw(game, scene, screen, res)
+    def _update(self, game, erase=False):
+        if self.text != self.old_text or erase:
+            current_rect = self.x + self.x_offset, self.y + self.y_offset, self.width, self.height
+            game.update_screen(current_rect, self.old_rect)
+            self.old_rect = current_rect
+            self.old_text = self.text
 
 
 class Game:
@@ -426,20 +233,28 @@ class Game:
         self._resolution = self.default_resolution
         self.framerate = fps
         self.fullscreen = fullscreen
+        self.title = title
+        self._title = title
         self.frame = frame
         self.hardware_acceleration = hardware_acceleration
+
+        self.os = system().lower()
+        if self.os == 'darwin':
+            self.os = 'macos'
 
         self.input_downs = []
         self.input_ups = []
         self.currently_pressed = []
         self.mouse_position = (0, 0)
-        self.quit_letters = ['q', 'u', 'i', 't']
+        self.quit_letters = 'q', 'u', 'i', 't'
         self.quit_progress = 0
 
         self.delta = 0
         self._previous_frame_total_ticks = 0
 
         self.file_paths = None
+
+        self._update_screen_in = 0
 
         pygame.init()
         if self.fullscreen:
@@ -474,6 +289,28 @@ class Game:
     def ny(self, y):
         return self._resolution[1] - y
 
+    def update_screen(self, x=None, y=None, width=None, height=None, old_rect=None):
+        if type(x) == tuple:
+            y, width, height = x[1], x[2], x[3]
+            x = x[0]
+
+        if x is None and y is None and width is None and height is None and old_rect is None:
+            pygame.display.flip()
+        else:
+            if old_rect is not None:
+                # pygame.draw.rect(self.screen, (255, 0, 0), pygame.Rect.union(pygame.Rect(x, self._resolution[1] - y - height, width, height), pygame.Rect(old_rect[0], self._resolution[1] - old_rect[1] - old_rect[3], old_rect[2], old_rect[3])))
+                pygame.display.update(pygame.Rect.union(pygame.Rect(x, self._resolution[1] - y - height, width, height), pygame.Rect(old_rect[0], self._resolution[1] - old_rect[1] - old_rect[3], old_rect[2], old_rect[3])))
+            else:
+                pygame.display.update(pygame.Rect(x, self._resolution[1] - y - height, width, height))
+
+        # pygame.display.update()
+
+    def blit_image(self, image, x, y, height):
+        self.screen.blit(image, (x, self._resolution[1] - y - height))
+
+    def get_color_at_pixel(self, x, y):
+        return self.screen.get_at((x, self._resolution[1] - y))[:3]
+
     def change_resolution(self, to):
         self._resolution = to
         if self.fullscreen:
@@ -487,6 +324,8 @@ class Game:
             else:
                 self.screen = pygame.display.set_mode(self._resolution, pygame.NOFRAME, pygame.HWSURFACE)
 
+        self._update_screen_in = 0.2
+
     def run_game(self):
         self.run = True
         # if self.current_scene is None:
@@ -499,6 +338,9 @@ class Game:
             self.input_ups.clear()
             self.input_downs.clear()
             self.file_paths = None
+
+            if self.title != self._title:
+                pygame.display.set_caption(self.title)
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -544,6 +386,13 @@ class Game:
             for i in self.input_ups:
                 self.currently_pressed.remove(i)
 
+            if self._update_screen_in > 0 and self._update_screen_in - self.delta <= 0:
+                self.update_screen()
+            if self._update_screen_in > 0:
+                self._update_screen_in -= self.delta
+                if self._update_screen_in < 0:
+                    self._update_screen_in = 0
+
             self.current_scene.run_scene()
             self.delta = (t - self._previous_frame_total_ticks) / 1000
             self._previous_frame_total_ticks = t
@@ -568,13 +417,22 @@ class Game:
         self.current_scene = scene
         scene.redraw = True
 
-    def constrict_to_screen(self, value, constricted_to, width=0, height=0):
+    def constrict_to_screen(self, value, constricted_to, width=0, height=0, scale=False):
         def constrict(valueidk, plus, axis=0):
             if valueidk < 0:
-                return 0
-            elif valueidk + plus > self._resolution[axis] - 1:
-                return self._resolution[axis] - 1 - plus
-            return valueidk
+                if not scale:
+                    return 0
+                else:
+                    return 0, plus + valueidk
+            elif valueidk + plus > self._resolution[axis]:
+                if not scale:
+                    return self._resolution[axis] - plus
+                else:
+                    return valueidk, plus - ((valueidk + plus) - (self._resolution[axis]))
+            if not scale:
+                return valueidk
+            else:
+                return valueidk, plus
 
         if constricted_to == 'x':
             if type(value) == int or type(value) == float:
@@ -582,7 +440,6 @@ class Game:
             return constrict(value.x, value.width)
         elif constricted_to == 'y':
             if type(value) == int or type(value) == float:
-                # print(f'constrict({value}, {height}, 1)')
                 return constrict(value, width, 1)
             return constrict(value.x, value.height, 1)
 
@@ -597,7 +454,8 @@ class Game:
             self.update_func = do_nothing
             self.resolution = game.default_resolution
             self.background = 0, 0, 0
-            self.background_center = 0, 0
+            self._old_background = self.background
+            self._background_center = 0, 0
             self.redraw = False
 
             self.animations = []
@@ -606,23 +464,25 @@ class Game:
         def clear(self):
             self.stuff = []
 
+        def __contains__(self, item):
+            if item in self.stuff:
+                return True
+            return False
+
         def set_background(self, background, _update=True):
             if type(background) == pygame.Surface:
                 self.background = background
-                self.game.screen.blit(self.background, self.background_center)
+                self.game.screen.blit(self.background, self._background_center)
             elif type(background) == tuple:
                 self.background = background
                 self.game.screen.fill(self.background)
             else:
-                self.background, self.background_center = image_stuff(background, self.game._resolution)
-                self.game.screen.blit(self.background, self.background_center)
-            if _update:
-                self.redraw = True
+                self.background, self._background_center = image_stuff(background, self.game._resolution)
+                self.game.screen.blit(self.background, self._background_center)
 
         def animate(self, start, stop, seconds=1):
             if len(self.animations) == 0 or self.animations[self.animation_calls][0] != (start, stop, seconds):
                 self.animations.append([(start, stop, seconds), seconds, seconds / (stop - start), start, True])
-                # print('hi')
 
             # (ID)     time_left     next_milestone     to_return_on_next_milestone     active
             #  0           1               2                        3                     4
@@ -633,9 +493,7 @@ class Game:
             if corresponding[4]:
                 self.animations[self.animation_calls][1] -= self.game.delta
                 to_return = None
-                # print(f'{corresponding[3]}               {corresponding[4]}')
                 if corresponding[1] <= seconds - corresponding[2]:
-                    # print('hey')
                     to_return = corresponding[3]
                     self.animations[self.animation_calls][3] += 1
                     self.animations[self.animation_calls][2] += seconds / (stop - start)
@@ -648,34 +506,38 @@ class Game:
             if self.resolution != self.game._resolution:
                 self.game.change_resolution(self.resolution)
 
+            self.set_background(self.background)
+            if self.background != self._old_background:
+                self._old_background = self.background
+                self.redraw = True
+
             self.animation_calls = 0
             self.update_func(self.game.delta)
-            self.set_background(self.background, False)
-
-            if self.redraw:
-                pygame.display.flip()
-                self.redraw = False
 
             for i in self.stuff:
-                i._draw(self.game, self, self.game.screen, self.game._resolution)
+                i._draw(self.game)
+            if self.redraw:
+                self.game.update_screen()
+                self.redraw = False
+            else:
+                for i in self.stuff:
+                    i._update(self.game)
 
         def game_update(self, func):
             self.update_func = func
 
-        def add(self, *objects):
+        def add(self, *objects, position=-1):
             if type(objects[0]) == tuple or type(objects[0]) == list:
                 for i in objects[0]:
                     self.stuff.append(i)
             else:
                 for i in objects:
-                    self.stuff.append(i)
+                    self.stuff.insert(position, i)
 
         def remove(self, *objects):
             for i in objects:
-                for index, j in enumerate(self.stuff):
-                    if i == j:
-                        self.stuff.pop(index)
-                        i.draw(self.game, self, self.game.screen, self.game.res, erase=True, background=self.background)
+                self.stuff.remove(i)
+                i._update(self.game, True)
 
         def update_obj(self, obj):
             obj.update()
@@ -698,3 +560,8 @@ class Game:
             y2 = obj_2[1] if type(obj_2) == tuple else obj_2.y
 
             return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
+
+        def square_distance(self, object_1, object_2, radius):
+            if object_1[0] - radius <= object_2[0] <= object_1[0] + radius and object_1[1] - radius <= object_2[1] <= object_1[1] + radius:
+                return True
+            return False
