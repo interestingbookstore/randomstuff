@@ -3,6 +3,8 @@ from PIL import Image, ImageFilter, ImageGrab
 from pathlib import Path
 
 # Version 1.1 BETA 1
+# Made by interestingbookstore
+# Github: https://github.com/interestingbookstore/randomstuff
 # -----  Options  ----------------------------------------------------------------------------------------------
 maximum_resolution = 1820, 980
 scale_up_image = False
