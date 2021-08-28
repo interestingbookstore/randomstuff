@@ -1,10 +1,19 @@
 import pickle
 from sys import exit as s_exit
+from pathlib import Path
+try:
+    import pyperclip
+    tk = None
+except ModuleNotFoundError:
+    pyperclip = None
+    from tkinter import Tk
+    tk = Tk()
 
+# Made by interestingbookstore
+# Github: https://github.com/interestingbookstore/randomstuff
 # ---------------------------------------------------------
 
 txt_save_folder = r''
-
 
 # ---------------------------------------------------------
 # With this library, you can edit a dictionary, which will save its information, even if you close and rerun the python script.
@@ -79,7 +88,7 @@ class UI:
         def __init__(self, ui_class):
             self._progress = 0
             self._total = 0
-            self._percent = 0
+            self._percent = None
             self._done = False
             self.style = ui_class.style
 
@@ -203,9 +212,34 @@ class UI:
     def quit(self):
         s_exit()
 
+    def get_clipboard(self):
+        if pyperclip is not None:
+            return pyperclip.paste()
+        return self.clipboard_type.clipboard_get()
+
+    def set_clipboard(self, text):
+        if pyperclip is not None:
+            pyperclip.copy(text)
+        else:
+            raise ModuleNotFoundError('UILibrary doesn\'t currently support pasting to clipboard without the module "pyperclip"')
+
     def set_default(self, name, default_value):
         if name not in self.save_info.stuff:
             self.save_info[name] = default_value
+    
+    def get_unique_file(self, path):
+        if Path(path).is_file():
+            filename = '.'.join(path.split('.')[:-1])
+            extension = '.' + path.split('.')[-1]
+
+            filename_addition = ' (*)'
+
+            num = 1
+            while Path(filename + filename_addition.replace('*', str(num)) + extension).is_file():
+                num += 1
+
+            path = filename + filename_addition.replace('*', str(num)) + extension
+        return path
 
     def OptionsList(self, options=()):
         return self._OptionsList(self, options)
@@ -216,7 +250,7 @@ class UI:
     def ask(self, question, validation=str, extra=None, end=': '):
         while True:
             add = ''
-            if validation == 'y/n' or validation == 'yn':
+            if validation == bool or validation == 'y/n' or validation == 'yn':
                 add += ' (y/n)'
             inp = input(self.style['bold_formatting'] + self.style['ask_color'] + question + add + end + self.colors.reset + self.style['user_input'])
             if inp == '/help':
@@ -236,7 +270,7 @@ class UI:
                     else:
                         idk = 'strings'
                     mes = f"""This one's a bit more tricky. You probably need to provide multiple answers (not necessarily, but more than likely), in this case {idk}.
-Separate them with spaces, include a backslash directly before one ("...\\ ...") to ignore it."""
+    Separate them with spaces, include a backslash directly before one ("...\\ ...") to ignore it."""
                 else:
                     mes = "The validation is something else, you're on your own for this one!"
                 print(self.style['normal_output_color'] + mes + '\n')
