@@ -254,7 +254,7 @@ Separate them with spaces, include a backslash directly before one ("...\\ ...")
                     return float(inp)
                 else:
                     self.error_print(f'Your answer must be a float')
-            elif validation == 'y/n' or validation == 'yn':
+            elif validation == bool or validation == 'y/n' or validation == 'yn':
                 if inp == 'y':
                     return True
                 elif inp == 'n':
