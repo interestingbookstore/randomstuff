@@ -1,12 +1,15 @@
 import pickle
 from sys import exit as s_exit
 from pathlib import Path
+
 try:
     import pyperclip
+
     tk = None
 except ModuleNotFoundError:
     pyperclip = None
     from tkinter import Tk
+
     tk = Tk()
 
 # Made by interestingbookstore
@@ -14,6 +17,7 @@ except ModuleNotFoundError:
 # ---------------------------------------------------------
 
 txt_save_folder = r''
+
 
 # ---------------------------------------------------------
 # With this library, you can edit a dictionary, which will save its information, even if you close and rerun the python script.
@@ -215,7 +219,7 @@ class UI:
     def get_clipboard(self):
         if pyperclip is not None:
             return pyperclip.paste()
-        return self.clipboard_type.clipboard_get()
+        return tk.clipboard_get()
 
     def set_clipboard(self, text):
         if pyperclip is not None:
