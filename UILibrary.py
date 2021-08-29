@@ -226,7 +226,7 @@ class UI:
     def set_default(self, name, default_value):
         if name not in self.save_info.stuff:
             self.save_info[name] = default_value
-    
+
     def get_unique_file(self, path):
         if Path(path).is_file():
             filename = '.'.join(path.split('.')[:-1])
