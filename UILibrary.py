@@ -1,5 +1,9 @@
 import pickle
 from sys import exit as s_exit
+from platform import system
+import subprocess
+from os import system as run_command
+from time import time
 from pathlib import Path
 
 try:
@@ -93,25 +97,28 @@ class UI:
             self._progress = 0
             self._total = 0
             self._percent = None
-            self._done = False
             self.style = ui_class.style
+            self._start_time = 0
 
         def update(self, progress, total, description='', length=50):
-            if total == 0:
+            if self._percent is None:
+                self._start_time = time()
+            if total == 0:  # If you only have to do 0 stuff, it's impossible to not have already done it
                 print('\r' + description + self.style['progress_bar_done'] + ' Done!')
             else:
+                if progress == 0:
+                    time_remaining = ''
+                else:
+                    time_remaining = f'{round((time() - self._start_time) * (total - progress) / progress)} seconds left'
                 fraction = progress / total
                 percent = int(fraction * 100)
                 amount = int(fraction * length)
                 if percent != self._percent:
-                    print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * amount}{self.style['reset']}{' ' * (length - amount)} {percent}%", end='')
-                    if percent >= 100:
-                        if not self._done:
-                            print('\r' + description + self.style['progress_bar_done'] + ' Done!' + self.style['reset'])
-                            self._done = True
-                    else:
-                        self._done = False
+                    print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * amount}{self.style['reset']}{' ' * (length - amount)} {percent}%  {time_remaining}", end='')
                     self._percent = percent
+                    if percent >= 100:
+                        print('\r' + description + self.style['progress_bar_done'] + ' Done!' + self.style['reset'])
+                        self._percent = None
 
     class _OptionsList:
         """Used for making lists, of options!"""
@@ -189,6 +196,9 @@ class UI:
     def __init__(self, txt_name=None, formatting=True):
         if txt_name is not None:
             self.save_info = _SavedInfo(txt_name)
+        self.os = system().lower()
+        if self.os == 'darwin':
+            self.os = 'macos'
         self.colors = self.Colors()
         if not formatting:
             self.colors.reset = ''
@@ -251,10 +261,19 @@ class UI:
     def error_print(self, text):
         print(self.style['error'] + text + '\n')
 
+    def open_path(self, path):
+        path = path.replace('\\', '/')
+        if self.os == 'windows':
+            subprocess.Popen(f'explorer /select,"{path}"')
+        elif self.os == 'macos':
+            subprocess.Popen(['open', path])
+        elif self.os == 'linux':
+            run_command(f'gio open "{path}"')  # Origionally    subprocess.Popen(['xdg-open', path])    was used, but gio is faster, and it doesn't print a bunch of errors...
+
     def ask(self, question, validation=str, extra=None, end=': '):
         while True:
             add = ''
-            if validation == bool or validation == 'y/n' or validation == 'yn':
+            if validation == 'y/n' or validation == 'yn':
                 add += ' (y/n)'
             inp = input(self.style['bold_formatting'] + self.style['ask_color'] + question + add + end + self.colors.reset + self.style['user_input'])
             if inp == '/help':
@@ -264,7 +283,7 @@ class UI:
                     mes = 'Your answer should be an integer.'
                 elif validation == float or validation == 'float':
                     mes = 'Your answer should be a float value. Any normal number (decimals included) pretty much.'
-                elif validation == 'y/n' or validation == 'yn':
+                elif validation == bool or validation == 'y/n' or validation == 'yn':
                     mes = """Your answer should just be a lowercase "y" for yes, or a lowercase "n" for no. y or n, that's it."""
                 elif validation == tuple or validation == 'tuple':
                     if extra == int or extra == 'int':
@@ -274,7 +293,7 @@ class UI:
                     else:
                         idk = 'strings'
                     mes = f"""This one's a bit more tricky. You probably need to provide multiple answers (not necessarily, but more than likely), in this case {idk}.
-    Separate them with spaces, include a backslash directly before one ("...\\ ...") to ignore it."""
+Separate them with spaces, include a backslash directly before one ("...\\ ...") to ignore it."""
                 else:
                     mes = "The validation is something else, you're on your own for this one!"
                 print(self.style['normal_output_color'] + mes + '\n')
