@@ -1,5 +1,5 @@
 import pickle
-from sys import exit as s_exit
+from sys import exit as s_exit, argv
 from platform import system
 import subprocess
 from os import system as run_command
@@ -41,6 +41,9 @@ def large_number_formatter(number, type='notation', decimal_places=2):
     else:
         notations = 'K', 'M', 'B', 'T', 'Q'
         return str(round(number / 10 ** (thousands * 3), decimal_places)) + notations[thousands - 1]
+
+
+# def duration_formatter(duration, hi)
 
 
 def check_type(val, validation):
@@ -241,7 +244,10 @@ class UI:
         if name not in self.save_info.stuff:
             self.save_info[name] = default_value
 
-    def get_unique_file(self, path):
+    def get_unique_file(self, path, invalid_characters='remove'):
+        if not (invalid_characters == 'remove' or invalid_characters == 'keep'):
+            raise Exception(f'The invalid characters parameter should be either "remove" or "keep", but "{invalid_characters}" was given.')
+
         if Path(path).is_file():
             filename = '.'.join(path.split('.')[:-1])
             extension = '.' + path.split('.')[-1]
@@ -253,6 +259,15 @@ class UI:
                 num += 1
 
             path = filename + filename_addition.replace('*', str(num)) + extension
+        if invalid_characters == 'remove':
+            if self.os == 'windows':
+                bad_characters = r'<>:"|?*'
+                for i in bad_characters:
+                    if ':\\' in path:
+                        path = path.split(':\\', 1)[0] + ':\\' + path.split(':\\', 1)[1].replace(i, '')
+                    else:
+                        path = path.replace(i, '')
+
         return path
 
     def OptionsList(self, options=()):
@@ -260,6 +275,12 @@ class UI:
 
     def error_print(self, text):
         print(self.style['error'] + text + '\n')
+
+    def get_console_arguments(self):
+        return argv[1:]
+
+    def run_console_command(self, command):
+        run_command(command)
 
     def open_path(self, path):
         path = path.replace('\\', '/')
@@ -319,31 +340,17 @@ Separate them with spaces, include a backslash directly before one ("...\\ ...")
                 else:
                     self.error_print('Your response should be either "y" or "n".')
             elif validation == tuple or validation == 'tuple':
-                inp += ' '
-                inp2 = []
-                previous = 0
-                try:
-                    for index, i in enumerate(inp):
-                        if i == ' ' and index > 0:
-                            if inp[index - 1] != '\\':
-                                part = inp[previous:index]
-                                previous = index + 1
-                                if extra == str or extra == 'str':
-                                    inp2.append(int(part))
-                                    continue
-                                if extra == int or extra == 'int':
-                                    if check_type(part, int):
-                                        inp2.append(int(part))
-                                        continue
-                                if extra == float or extra == 'float':
-                                    if check_type(part, float):
-                                        inp2.append(float(part))
-                                        continue
-                                raise ValueError
-                    print(inp2)
-                    return tuple(inp2)
-                except ValueError:
-                    self.error_print('The values must be integers')
+                inp = [i.strip(' ') for i in inp.split(',')]
+
+                for i in inp:
+                    if extra == 'int':
+                        if not check_type(i, int):
+                            self.error_print('Your response consist of one or multiple integers, separated by a comma.')
+                    elif extra == 'float':
+                        if not check_type(i, float):
+                            self.error_print('Your response consist of one or multiple float values, separated by a comma.')
+                return inp
+
             else:
                 while True:
                     try:
