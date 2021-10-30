@@ -15,9 +15,12 @@ except ModuleNotFoundError:
     from tkinter import Tk
 
     tk = Tk()
+    tk.withdraw()
 
 # Made by interestingbookstore
 # Github: https://github.com/interestingbookstore/randomstuff
+# -----------------------------------------------------------------------
+# Version released on October 30 2021
 # ---------------------------------------------------------
 
 txt_save_folder = r''
@@ -29,21 +32,49 @@ txt_save_folder = r''
 # If the variable above is left as an empty string, it'll be saved in the current directory. Otherwise,
 # it'll be saved in the folder above. (no slash at the end)
 
-def large_number_formatter(number, type='notation', decimal_places=2):
+def large_number_formatter(number, decimal_places=2):
+    num = str(number)
+    thousands = (len(num) - 1) // 3
+    notations = 'K', 'M', 'B', 'T', 'Q'
+    return str(round(number / 10 ** (thousands * 3), decimal_places)) + notations[thousands - 1]
+
+
+def time_formatter(seconds):
+    units_singular = ['minute', 'hour', 'day', 'week', 'month', 'year', 'decade', 'century']
+    units = ['minutes', 'hours', 'days', 'weeks', 'months', 'years', 'decades', 'centuries']
+    seconds_in_unit = [60, 3600, 86400, 604800, 18144000, 217728000, 2177280000, 21772800000]
+
+    result = ''
+    remainder = seconds
+    while remainder >= seconds_in_unit[0]:
+        for index, i in enumerate(reversed(seconds_in_unit)):
+            index = -index - 1
+            idk = seconds // i
+            if idk >= 1:
+                if idk < 2:
+                    result += f'{idk} {units_singular[index]}, '
+                else:
+                    result += f'{idk} {units[index]}, '
+                remainder = seconds % i
+                break
+    if remainder > 0:
+        if remainder < 2:
+            result += f'{remainder} second'
+        else:
+            result += f'{remainder} seconds'
+    else:
+        result = result[:-2]
+    return result
+
+
+def add_comma_to_number(number):
     num = str(number)
     length = len(num)
     thousands = (len(num) - 1) // 3
-    if type == ',':
-        for i in range(thousands):
-            i += 1
-            num = num[:length - i * 3] + ',' + num[length - i * 3:]
-        return num
-    else:
-        notations = 'K', 'M', 'B', 'T', 'Q'
-        return str(round(number / 10 ** (thousands * 3), decimal_places)) + notations[thousands - 1]
-
-
-# def duration_formatter(duration, hi)
+    for i in range(thousands):
+        i += 1
+        num = num[:length - i * 3] + ',' + num[length - i * 3:]
+    return num
 
 
 def check_type(val, validation):
@@ -238,7 +269,7 @@ class UI:
         if pyperclip is not None:
             pyperclip.copy(text)
         else:
-            raise ModuleNotFoundError('UILibrary doesn\'t currently support pasting to clipboard without the module "pyperclip"')
+            tk.clipboard_append(text)
 
     def set_default(self, name, default_value):
         if name not in self.save_info.stuff:
