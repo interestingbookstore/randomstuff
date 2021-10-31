@@ -39,29 +39,39 @@ def large_number_formatter(number, decimal_places=2):
     return str(round(number / 10 ** (thousands * 3), decimal_places)) + notations[thousands - 1]
 
 
-def time_formatter(seconds):
+def time_formatter(seconds, add_and=True):
+    if seconds == 0:
+        return '0 seconds'
+
     units_singular = ['minute', 'hour', 'day', 'week', 'month', 'year', 'decade', 'century']
     units = ['minutes', 'hours', 'days', 'weeks', 'months', 'years', 'decades', 'centuries']
     seconds_in_unit = [60, 3600, 86400, 604800, 18144000, 217728000, 2177280000, 21772800000]
+    units_singular = list(reversed(units_singular))
+    units = list(reversed(units))
+    seconds_in_unit = list(reversed(seconds_in_unit))
 
     result = ''
-    remainder = seconds
-    while remainder >= seconds_in_unit[0]:
-        for index, i in enumerate(reversed(seconds_in_unit)):
-            index = -index - 1
+    seconds = seconds
+    while seconds >= seconds_in_unit[-1]:
+        for index, i in enumerate(seconds_in_unit):
             idk = seconds // i
             if idk >= 1:
                 if idk < 2:
                     result += f'{idk} {units_singular[index]}, '
                 else:
                     result += f'{idk} {units[index]}, '
-                remainder = seconds % i
+                seconds %= i
                 break
-    if remainder > 0:
-        if remainder < 2:
-            result += f'{remainder} second'
+    if seconds > 0:
+        if add_and:
+            if result != '':
+                if result[-2:] == ', ':
+                    result = result[:-2] + ' '
+                result += 'and '
+        if seconds < 2:
+            result += f'{seconds} second'
         else:
-            result += f'{remainder} seconds'
+            result += f'{seconds} seconds'
     else:
         result = result[:-2]
     return result
@@ -141,14 +151,14 @@ class UI:
                 print('\r' + description + self.style['progress_bar_done'] + ' Done!')
             else:
                 if progress == 0:
-                    time_remaining = ''
+                    time_remaining = None
                 else:
-                    time_remaining = f'{round((time() - self._start_time) * (total - progress) / progress)} seconds left'
+                    time_remaining = round((time() - self._start_time) * (total - progress) / progress)
                 fraction = progress / total
                 percent = int(fraction * 100)
                 amount = int(fraction * length)
                 if percent != self._percent:
-                    print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * amount}{self.style['reset']}{' ' * (length - amount)} {percent}%  {time_remaining}", end='')
+                    print('\r' + f"{description} {self.style['progress_bar_color']}{self.style['progress_bar'] * amount}{self.style['reset']}{' ' * (length - amount)} {percent}%  {time_formatter(time_remaining) + ' left' if time_remaining is not None else ''}", end='')
                     self._percent = percent
                     if percent >= 100:
                         print('\r' + description + self.style['progress_bar_done'] + ' Done!' + self.style['reset'])
@@ -310,8 +320,18 @@ class UI:
     def get_console_arguments(self):
         return argv[1:]
 
-    def run_console_command(self, command):
-        run_command(command)
+    def run_terminal_command(self, command, print_output=False):
+        if not print_output:
+            return subprocess.run(command.split(' '), capture_output=True, universal_newlines=True).stdout.strip('\n')
+        else:
+            subprocess.run(command.split(' '))
+
+    def check_if_terminal_command_exists(self, command):
+        try:
+            self.run_terminal_command(command)
+            return True
+        except FileNotFoundError:
+            return False
 
     def open_path(self, path):
         path = path.replace('\\', '/')
@@ -320,7 +340,7 @@ class UI:
         elif self.os == 'macos':
             subprocess.Popen(['open', path])
         elif self.os == 'linux':
-            run_command(f'gio open "{path}"')  # Origionally    subprocess.Popen(['xdg-open', path])    was used, but gio is faster, and it doesn't print a bunch of errors...
+            run_command(f'gio open "{path}"')
 
     def ask(self, question, validation=str, extra=None, end=': '):
         while True:
