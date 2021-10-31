@@ -285,11 +285,16 @@ class UI:
         if name not in self.save_info.stuff:
             self.save_info[name] = default_value
 
+    def check_if_file_exists(self, path):
+        if Path(path).is_file():
+            return True
+        return False
+
     def get_unique_file(self, path, invalid_characters='remove'):
         if not (invalid_characters == 'remove' or invalid_characters == 'keep'):
             raise Exception(f'The invalid characters parameter should be either "remove" or "keep", but "{invalid_characters}" was given.')
 
-        if Path(path).is_file():
+        if self.check_if_file_exists(path):
             filename = '.'.join(path.split('.')[:-1])
             extension = '.' + path.split('.')[-1]
 
