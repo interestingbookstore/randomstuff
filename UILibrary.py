@@ -289,11 +289,23 @@ class UI:
         if Path(path).is_file():
             return True
         return False
+    
+    def remove_invalid_filename_characters(self, path, windows_only=True):
+        if self.os == 'windows' or not windows_only:
+            bad_characters = '<>:"|?*'
+            for i in bad_characters:
+                if ':\\' in path:
+                    path = path.split(':\\', 1)[0] + ':\\' + path.split(':\\', 1)[1].replace(i, '')  # A ":" is only allowed in the "C:..." section
+                else:
+                    path = path.replace(i, '')
+        return path
+    
+    def format_slashes_for_windows(self, path):
+        if self.os == 'windows':
+            path = path.replace('/', '\\')
+        return path
 
-    def get_unique_file(self, path, invalid_characters='remove'):
-        if not (invalid_characters == 'remove' or invalid_characters == 'keep'):
-            raise Exception(f'The invalid characters parameter should be either "remove" or "keep", but "{invalid_characters}" was given.')
-
+    def get_unique_file(self, path, remove_invalid_characters=True, format_slashes_for_windows=True):
         if self.check_if_file_exists(path):
             filename = '.'.join(path.split('.')[:-1])
             extension = '.' + path.split('.')[-1]
@@ -305,15 +317,10 @@ class UI:
                 num += 1
 
             path = filename + filename_addition.replace('*', str(num)) + extension
-        if invalid_characters == 'remove':
-            if self.os == 'windows':
-                bad_characters = r'<>:"|?*'
-                for i in bad_characters:
-                    if ':\\' in path:
-                        path = path.split(':\\', 1)[0] + ':\\' + path.split(':\\', 1)[1].replace(i, '')
-                    else:
-                        path = path.replace(i, '')
-
+        if remove_invalid_characters:
+            path = self.remove_invalid_filename_characters(path)
+        if format_slashes_for_windows:
+            path = self.format_slashes_for_windows(path)
         return path
 
     def OptionsList(self, options=()):
