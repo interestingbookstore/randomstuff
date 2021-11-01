@@ -20,7 +20,7 @@ except ModuleNotFoundError:
 # Made by interestingbookstore
 # Github: https://github.com/interestingbookstore/randomstuff
 # -----------------------------------------------------------------------
-# Version released on October 30 2021
+# Version released on October 31 2021  Happy Halloween!
 # ---------------------------------------------------------
 
 txt_save_folder = r''
@@ -289,7 +289,7 @@ class UI:
         if Path(path).is_file():
             return True
         return False
-    
+
     def remove_invalid_filename_characters(self, path, windows_only=True):
         if self.os == 'windows' or not windows_only:
             bad_characters = '<>:"|?*'
@@ -299,7 +299,7 @@ class UI:
                 else:
                     path = path.replace(i, '')
         return path
-    
+
     def format_slashes_for_windows(self, path):
         if self.os == 'windows':
             path = path.replace('/', '\\')
@@ -334,9 +334,9 @@ class UI:
 
     def run_terminal_command(self, command, print_output=False):
         if not print_output:
-            return subprocess.run(command.split(' '), capture_output=True, universal_newlines=True).stdout.strip('\n')
+            return subprocess.run(command, capture_output=True, universal_newlines=True, shell=True).stdout.strip('\n')
         else:
-            subprocess.run(command.split(' '))
+            subprocess.run(command, shell=True)
 
     def check_if_terminal_command_exists(self, command):
         try:
