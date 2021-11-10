@@ -1,13 +1,12 @@
+import PIL.Image
 from PIL import Image, ImageDraw, ImageFont
-
 
 
 # Made by interestingbookstore
 # Github: https://github.com/interestingbookstore/randomstuff
 # -----------------------------------------------------------------------
-# Version released on November 10 2021
+# Version released on November 10 2021 - II
 # ---------------------------------------------------------
-
 
 
 def r(start, stop):
@@ -25,7 +24,18 @@ class PyBookImage:
         if len(params) not in parameter_sizes:
             Exception('Parameters can either be "{path to image}" or (width, height, background=(0, 0, 0, 0))')
         if len(params) == 1:
-            self.im = Image.open(params[0])
+            extensions = ['', '.png', '.jpg']
+            while True:
+                try:
+                    if len(extensions) == 0:
+                        raise IndexError
+                    self.im = Image.open(params[0] + extensions[0])
+                    break
+                except FileNotFoundError:
+                    extensions.pop(0)
+                except IndexError:
+                    self.im = Image.open(params[0])
+
             self.resx, self.resy = self.im.size
         else:
             if len(params) == 2:
@@ -35,12 +45,37 @@ class PyBookImage:
             self.im = Image.new('RGBA', (width, height), background).convert('RGBA')
         self.img = self.im.load()
         self.d = ImageDraw.Draw(self.im)
+        self.width, self.height = self.resx, self.resy
+        self.size = self.width, self.height
 
     def __getitem__(self, item):
-        return self.img[item[0], item[1]]
+        return self.img[item[0], self.normalize_y(item[1])]
 
-    def __setitem__(self, key, value):
-        self.img[key] = value
+    def __setitem__(self, key, value, blend=False):
+        self.add_point(key[0], key[1], value, set=not blend)
+
+    def show(self):
+        self.im.show()
+
+    def resize(self, width, height=None, interpolation='bicubic'):
+        interpolation_dict = {'nearest': PIL.Image.NEAREST, 'bilinear': PIL.Image.BILINEAR, 'bicubic': PIL.Image.BICUBIC, 'lanczos': PIL.Image.NEAREST}
+        if interpolation not in interpolation_dict:
+            raise Exception(f'Interpolation can be "nearest", "bilinear", "bicubic", or "lanczos". But {interpolation} given.')
+        if height is None:
+            if type(width) == int:
+                height = round(width / self.width * self.height)
+            else:
+                width, height = width
+        self.im = self.im.resize((width, height), interpolation_dict[interpolation])
+
+    def make_rgb(self):
+        self.im = self.im.convert('RGB').convert('RGBA')
+
+    def make_bw(self, alpha=True):
+        if alpha:
+            self.im = self.im.convert('LA').convert('RGBA')
+        else:
+            self.im = self.im.convert('L').convert('RGBA')
 
     def normalize_y(self, y):
         if type(y) == tuple:
