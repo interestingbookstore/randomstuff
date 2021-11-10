@@ -3,6 +3,15 @@ import pygame
 import math
 
 
+
+# Made by interestingbookstore
+# Github: https://github.com/interestingbookstore/randomstuff
+# -----------------------------------------------------------------------
+# Version released on November 10 2021
+# ---------------------------------------------------------
+
+
+
 def do_nothing():
     pass
 
