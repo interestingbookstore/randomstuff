@@ -4,6 +4,16 @@ from PIL import Image, ImageFilter, ImageDraw, ImageDraw, ImageFont
 from platform import system
 import copy
 
+
+
+# Made by interestingbookstore
+# Github: https://github.com/interestingbookstore/randomstuff
+# -----------------------------------------------------------------------
+# Version released on October 11 2021
+# ---------------------------------------------------------
+
+
+
 if system().lower() == 'windows':
     import ctypes
 
