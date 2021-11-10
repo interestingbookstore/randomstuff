@@ -1,5 +1,6 @@
 import numpy
 import pygame
+import math
 
 
 def do_nothing():
@@ -7,16 +8,15 @@ def do_nothing():
 
 
 pygame.init()
+_mouse = pygame.mouse
 _run = False
 _screen = None
-_xres = None
-_yres = None
 _pixels = None
 _update_loop = do_nothing
-scaling = 1
+scaling = 1  # NOT IMPLEMENTED
 _clock = pygame.time.Clock()
 _delta = 0
-_debug_fps = True
+DEBUG_FPS = False
 
 
 def update_loop(function):
@@ -36,15 +36,18 @@ def set_pixel(x, y, color):
     # for channel in range(3):
     #     _pixels[x, yres - y - 1, channel] = color[channel]
 
-    if len(color) == 4:
-        o = color[3] / 255
-        color = color[:3]
-        old_color = _pixels[x, y]
-        for channel in range(3):
-            _pixels[x, yres - y - 1, channel] = round(color[channel] * o + old_color[channel] * (1 - o))
-    else:
-        for channel in range(3):
-            _pixels[x, yres - y - 1, channel] = color[channel]
+    x, y = round(x), round(y)
+
+    if 0 <= x < xres and 0 <= y < yres:
+        if len(color) == 4:
+            o = color[3] / 255
+            color = color[:3]
+            old_color = _pixels[x, y]
+            for channel in range(3):
+                _pixels[x, yres - y - 1, channel] = round(color[channel] * o + old_color[channel] * (1 - o))
+        else:
+            for channel in range(3):
+                _pixels[x, yres - y - 1, channel] = color[channel]
 
 
 def fill(color):
@@ -54,16 +57,65 @@ def fill(color):
         _pixels[:, :, channel] = color[channel]
 
 
+input_downs = []  # Keys that were just now pressed
+input_ups = []  # Keys that were just now released
+currently_pressed = []  # Keys that were pressed but haven't yet been released
+mouse_position = [0, 0]  # variables are weird; if I make this an immutable tuple, and redefine it every frame, I'm guessing that each redefinition breaks the original variable's links. Thereby keeping any references at (0, 0). So, it has to be a list.
+
+
 def run_game():
     global _run, _delta
     _run = True
     try:
         while _run:
+            input_downs.clear()
+            input_ups.clear()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     _run = False
                     pygame.quit()
                     raise SystemExit
+                elif event.type == pygame.KEYDOWN:
+                    key = pygame.key.name(event.key)
+                    if key == 'left' or key == 'right' or key == 'up' or key == 'down':
+                        key += '_arrow'
+                    key = key.replace(' ', '_')
+                    if key == 'left_shift' or key == 'right_shift':
+                        input_downs.append('shift')
+                    input_downs.append(key)
+                elif event.type == pygame.KEYUP:
+                    key = pygame.key.name(event.key)
+                    if key == 'left' or key == 'right' or key == 'up' or key == 'down':
+                        key += '_arrow'
+                    key = key.replace(' ', '_')
+                    if key == 'left_shift' or key == 'right_shift':
+                        input_ups.append('shift')
+                    input_ups.append(key)
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    pressed = _mouse.get_pressed(3)
+                    if pressed[0]:
+                        input_downs.append('left')
+                    if pressed[1]:
+                        input_downs.append('middle')
+                    if pressed[2]:
+                        input_downs.append('right')
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    pressed = _mouse.get_pressed(3)
+                    if not pressed[0] and 'left' in currently_pressed:
+                        input_ups.append('left')
+                    if not pressed[1] and 'middle' in currently_pressed:
+                        input_ups.append('middle')
+                    if not pressed[2] and 'right' in currently_pressed:
+                        input_ups.append('right')
+                elif event.type == pygame.MOUSEMOTION:
+                    pos = _mouse.get_pos()
+                    mouse_position[0] = pos[0]
+                    mouse_position[1] = yres - pos[1]
+
+            for key in input_downs:
+                currently_pressed.append(key)
+            for key in input_ups:
+                currently_pressed.remove(key)
 
             pixels = pygame.surfarray.pixels3d(_screen)
             for channel in range(3):
@@ -78,10 +130,52 @@ def run_game():
             _delta += _clock.tick()
             if _delta >= 1000:
                 _delta = 0
-                if _debug_fps:
+                if DEBUG_FPS:
                     print(_clock.get_fps())
-    except SystemExit:
+    except SystemExit:  # To end the loop immediately after "event.type == pygame.QUIT"
         pass
+
+
+def just_pressed(*keys, type='and'):
+    if type == 'and':
+        for key in keys:
+            if key not in input_downs:
+                return False
+        return True
+    elif type == 'or':
+        for key in keys:
+            if key in input_downs:
+                return True
+        return False
+    raise Exception(f'"type" can be "and" (meaning all of the keys must be pressed down) or "or" (meaning at least one key must be pressed down), but "{type}" given.')
+
+
+def just_released(*keys, type='and'):
+    if type == 'and':
+        for key in keys:
+            if key not in input_ups:
+                return False
+        return True
+    elif type == 'or':
+        for key in keys:
+            if key in input_ups:
+                return True
+        return False
+    raise Exception(f'"type" can be "and" (meaning all of the keys must be released) or "or" (meaning at least one key must be released), but "{type}" given.')
+
+
+def is_pressed(*keys, type='and'):
+    if type == 'and':
+        for key in keys:
+            if key not in currently_pressed:
+                return False
+        return True
+    elif type == 'or':
+        for key in keys:
+            if key in currently_pressed:
+                return True
+        return False
+    raise Exception(f'"type" can be "and" (meaning all of the keys must be pressed down) or "or" (meaning at least one key must be pressed down), but "{type}" given.')
 
 
 def distance(point1, point2, distances_given=False):
@@ -100,14 +194,19 @@ def normalized(vector):
 
 
 def lerp(from_point, to_point, weight=0.5):
-    movement_vector = from_point[0] - to_point[0], from_point[1] - to_point[1]
+    movement_vector = to_point[0] - from_point[0], to_point[1] - from_point[1]
     if isinstance(from_point, Vector2):
         return Vector2(from_point[0] + movement_vector[0] * weight, from_point[1] + movement_vector[1] * weight)
     return from_point[0] + movement_vector[0] * weight, from_point[1] + movement_vector[1] * weight
 
 
 class Vector2:
-    def __init__(self, x: float, y: float):
+    def __init__(self, x: int or float or tuple or list or Vector2, y=None):
+        if y is None:
+            if type(x) == tuple or type(x) == list or type(x) == Vector2:
+                x, y = x
+            else:
+                raise Exception(f'y value not provided, x value was {x}')
         self.x, self.y = x, y
         self.stuff = self.x, self.y
 
@@ -142,6 +241,15 @@ class Vector2:
             return True
         return False
 
+    def __floor__(self):
+        return Vector2(math.floor(self.x), math.floor(self.y))
+
+    def __ceil__(self):
+        return Vector2(math.ceil(self.x), math.ceil(self.y))
+
+    def __trunc__(self):
+        return Vector2(math.trunc(self.x), math.trunc(self.y))
+
     def __getitem__(self, item):
         return self.stuff[item]
 
@@ -156,6 +264,9 @@ class Vector2:
     def __len__(self):
         return 2
 
+    def __neg__(self):
+        return Vector2(self * -1)
+
     def check(self, other):
         if isinstance(other, Vector2) or type(other) == tuple or type(other) == list:
             if len(other) != 2:
@@ -166,138 +277,68 @@ class Vector2:
             raise TypeError(f'Vector2, tuple, list, int, or float object expected, but {type(other)} given.')
         return other
 
-    def round(self):
-        pass
-        # self.x, self.y = round(self.x), round(self.y)
+    def round(self, n=None):  # Round self
+        self.x, self.y = self.__round__(n)
+
+    def __round__(self, n=None):  # Return rounded version of self
+        if n is None:
+            return Vector2(round(self.x), round(self.y))
+        return Vector2(round(self.x, n), round(self.y, n))
 
     def __add__(self, other):
-        if type(other) == tuple or type(other) == list:
-            if not (len(other) == 1 or len(other) == 2):
-                raise Exception(f'{type(other)} object given, but length is {len(other)}, when it should be either one or two.')
-        elif not isinstance(other, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(other)} given.')
-
-        if len(other) == 1:
-            return self.x + other, self.y + other
-        return self.x + other[0], self.y + other[1]
+        other = self.check(other)
+        return Vector2(self.x + other[0], self.y + other[1])
 
     def __sub__(self, other):  # subtraction
-        if type(other) == tuple or type(other) == list:
-            if not (len(other) == 1 or len(other) == 2):
-                raise Exception(f'{type(other)} object given, but length is {len(other)}, when it should be either one or two.')
-        elif not isinstance(other, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(other)} given.')
-
-        if len(other) == 1:
-            return self.x - other, self.y - other
-        return self.x - other[0], self.y - other[1]
+        other = self.check(other)
+        return Vector2(self.x - other[0], self.y - other[1])
 
     def __mul__(self, other):
         other = self.check(other)
-
-        return self.x * other[0], self.y * other[1]
+        return Vector2(self.x * other[0], self.y * other[1])
 
     def __truediv__(self, other):
-        if type(other) == tuple or type(other) == list:
-            if not (len(other) == 1 or len(other) == 2):
-                raise Exception(f'{type(other)} object given, but length is {len(other)}, when it should be either one or two.')
-        elif not isinstance(other, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(other)} given.')
-
-        if len(other) == 1:
-            return self.x / other, self.y / other
-        return self.x / other[0], self.y / other[1]
+        other = self.check(other)
+        return Vector2(self.x / other[0], self.y / other[1])
 
     def __floordiv__(self, other):
-        if type(other) == tuple or type(other) == list:
-            if not (len(other) == 1 or len(other) == 2):
-                raise Exception(f'{type(other)} object given, but length is {len(other)}, when it should be either one or two.')
-        elif not isinstance(other, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(other)} given.')
-
-        if len(other) == 1:
-            return self.x // other, self.y // other
-        return self.x // other[0], self.y // other[1]
+        other = self.check(other)
+        return Vector2(self.x // other[0], self.y // other[1])
 
     def __pow__(self, power, modulo=None):
-        if type(power) == tuple or type(power) == list:
-            if not (len(power) == 1 or len(power) == 2):
-                raise Exception(f'{type(power)} object given, but length is {len(power)}, when it should be either one or two.')
-        elif not isinstance(power, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(power)} given.')
-
-        if len(power) == 1:
-            return self.x ** power, self.y ** power
-        return self.x ** power[0], self.y ** power[1]
+        power = self.check(power)
+        return Vector2(self.x ** power[0], self.y ** power[1])
 
     def __iadd__(self, other):
         other = self.check(other)
         self.x += other[0]
         self.y += other[1]
-        self.round()
 
     def __isub__(self, other):  # subtraction
-        if type(other) == tuple or type(other) == list:
-            if not (len(other) == 1 or len(other) == 2):
-                raise Exception(f'{type(other)} object given, but length is {len(other)}, when it should be either one or two.')
-        elif not isinstance(other, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(other)} given.')
-
-        if len(other) == 1:
-            self.x -= other
-            self.y -= other
-        else:
-            self.x -= other[0]
-            self.y -= other[1]
+        other = self.check(other)
+        self.x -= other[0]
+        self.y -= other[1]
 
     def __imul__(self, other):
         other = self.check(other)
-        print(f'{other=}')
         self.x *= other[0]
         self.y *= other[1]
-        self.round()
 
     def __idiv__(self, other):
-        if type(other) == tuple or type(other) == list:
-            if not (len(other) == 1 or len(other) == 2):
-                raise Exception(f'{type(other)} object given, but length is {len(other)}, when it should be either one or two.')
-        elif not isinstance(other, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(other)} given.')
-
-        if len(other) == 1:
-            self.x /= other
-            self.y /= other
-        else:
-            self.x /= other[0]
-            self.y /= other[1]
+        other = self.check(other)
+        self.x /= other[0]
+        self.y /= other[1]
 
     def __ifloordiv__(self, other):
-        if type(other) == tuple or type(other) == list:
-            if not (len(other) == 1 or len(other) == 2):
-                raise Exception(f'{type(other)} object given, but length is {len(other)}, when it should be either one or two.')
-        elif not isinstance(other, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(other)} given.')
-
-        if len(other) == 1:
-            self.x //= other
-            self.y //= other
-        else:
-            self.x //= other[0]
-            self.y //= other[1]
+        other = self.check(other)
+        self.x //= other[0]
+        self.y //= other[1]
 
     def __ipow__(self, power, modulo=None):
-        if type(power) == tuple or type(power) == list:
-            if not (len(power) == 1 or len(power) == 2):
-                raise Exception(f'{type(power)} object given, but length is {len(power)}, when it should be either one or two.')
-        elif not isinstance(power, Vector2):
-            raise TypeError(f'Vector2, tuple, or list object expected, but {type(power)} given.')
+        power = self.check(power)
 
-        if len(power) == 1:
-            self.x **= power
-            self.y **= power
-        else:
-            self.x **= power[0]
-            self.y **= power[1]
+        self.x **= power[0]
+        self.y **= power[1]
 
 
 # ----------------
@@ -401,3 +442,9 @@ def draw_circle(origin, radius, fill):
                 dist -= radius
                 if dist < 1:
                     set_pixel(x, y, (fill[0], fill[1], fill[2], round(fill[3] * (1 - dist))))
+
+
+def draw_optimized_line(start, end, color):
+    start = start[0], yres - start[1] - 1
+    end = end[0], yres - end[1] - 1
+    pygame.draw.aaline(_screen, color, start, end)
