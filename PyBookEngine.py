@@ -155,7 +155,6 @@ class TwoDimensionalList:
 	def __init__(self, single_list, width):
 		self.stuff = single_list
 		self.width = width
-		print(self.width)
 		self.height = len(single_list) // self.width
 		self.fancy_list = []
 		fancy_buffer = []
@@ -168,11 +167,11 @@ class TwoDimensionalList:
 			self.fancy_list.append(fancy_buffer)
 		self.coords = []
 		for index, _ in enumerate(self.stuff):
-			self.coords.append((index // self.width, index % self.width))
+			self.coords.append((index % self.width, index // self.width))
 
 	def check(self, index):
 		if type(index) == list or type(index) == tuple:
-			return index[1] + index[0] * self.width, index
+			return index[0] + index[1] * self.width, index
 		return index, (index % self.width, index // self.width)
 
 	def __contains__(self, item):
@@ -186,15 +185,15 @@ class TwoDimensionalList:
 	def __setitem__(self, key, value):
 		keys = self.check(key)
 		# print(self.fancy_list)
-		try:
-			self.stuff[keys[0]] = value
-			self.fancy_list[keys[1][1]][keys[1][0]] = value
-		except IndexError:
-			print(f'{key = }')
-			print(f'{keys = }')
-			print(self.fancy_list)
-			# print(self.__repr__())
-			raise IndexError
+		self.stuff[keys[0]] = value
+		self.fancy_list[keys[1][1]][keys[1][0]] = value
+
+	# except IndexError:
+	# 	print(f'{key = }')
+	# 	print(f'{keys = }')
+	# 	print(self.fancy_list)
+	# 	# print(self.__repr__())
+	# 	raise IndexError
 
 	def __repr__(self):
 		# return str(self.stuff)
