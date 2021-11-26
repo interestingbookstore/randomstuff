@@ -1,6 +1,7 @@
 import PIL.Image
 from PIL import Image, ImageDraw, ImageFont
 
+
 # Made by interestingbookstore
 # Github: https://github.com/interestingbookstore/randomstuff
 # -----------------------------------------------------------------------
@@ -19,16 +20,25 @@ def r(start, stop):
 
 class PyBookImage:
     def __init__(self, *params):
+        self.img = None
+        self.d = None
+        self.resx, self.resy = None, None
+        self.width, self.height = None, None
+        self.size = None
+
         parameter_sizes = 1, 2, 3
         if len(params) not in parameter_sizes:
             Exception('Parameters can either be "{path to image}" or (width, height, background=(0, 0, 0, 0))')
-        if len(params) == 1:
+        if len(params) == 1 or (len(params) == 2 and isinstance(params[0], str)):
             extensions = ['', '.png', '.jpg']
             while True:
                 try:
                     if len(extensions) == 0:
                         raise IndexError
                     self.im = Image.open(params[0] + extensions[0]).convert('RGBA')
+                    self.update_dimensions_and_stuff()
+                    if len(params) == 2:
+                        self.resize(params[1])
                     break
                 except FileNotFoundError:
                     extensions.pop(0)
@@ -39,11 +49,7 @@ class PyBookImage:
                 params = params[0], params[1], (0, 0, 0, 0)
             width, height, background = params
             self.im = Image.new('RGBA', (width, height), background)
-        self.img = self.im.load()
-        self.d = ImageDraw.Draw(self.im)
-        self.resx, self.resy = self.im.size
-        self.width, self.height = self.resx, self.resy
-        self.size = self.width, self.height
+            self.update_dimensions_and_stuff()
 
     def update_dimensions_and_stuff(self):
         self.img = self.im.load()
@@ -55,21 +61,25 @@ class PyBookImage:
     def __getitem__(self, item):
         return self.img[item[0], self.normalize_y(item[1])]
 
-    def __setitem__(self, key, value, blend=False):
+    def __setitem__(self, key, value):
         x, y = key[0], self.normalize_y(key[1])
-        if len(value) == 3:
-            nc = value
-            nt = 1
-        else:
-            nc = value[:3]
-            nt = value[3] / 255
-        oc, ot = self.img[x, y][:3], self.img[x, y][3]
-        nc2 = nc[0] * nt + oc[0] * (255 - nt), nc[1] * nt + oc[1] * (255 - nt), nc[2] * nt + oc[2] * (255 - nt), (ot + nt) * 255
-        nc2 = tuple(255 if round(i) > 255 else round(i) for i in nc2)
-        self.img[x, y] = nc2
+        if (0 <= x < self.width) and (0 <= y < self.height):
+            if len(value) == 3:
+                nc = value
+                nt = 1
+            else:
+                nc = value[:3]
+                nt = value[3] / 255
+            oc, ot = self.img[x, y][:3], self.img[x, y][3]
+            nc2 = nc[0] * nt + oc[0] * (255 - nt), nc[1] * nt + oc[1] * (255 - nt), nc[2] * nt + oc[2] * (255 - nt), (ot + nt) * 255
+            nc2 = tuple(255 if round(i) > 255 else round(i) for i in nc2)
+            self.img[x, y] = nc2
 
     def show(self):
         self.im.show()
+
+    def to_bytes(self):
+        return self.im.tobytes('raw', 'RGBA')
 
     def resize(self, width, height=None, interpolation='bicubic'):
         interpolation_dict = {'nearest': PIL.Image.NEAREST, 'bilinear': PIL.Image.BILINEAR, 'bicubic': PIL.Image.BICUBIC, 'lanczos': PIL.Image.NEAREST}
@@ -83,6 +93,9 @@ class PyBookImage:
         self.im = self.im.resize((width, height), interpolation_dict[interpolation])
         self.update_dimensions_and_stuff()
 
+    def scale(self, scale):
+        self.resize(round(self.width * scale))
+
     def remove_transparency(self):
         self.im = self.im.convert('RGB').convert('RGBA')
         self.update_dimensions_and_stuff()
@@ -91,10 +104,19 @@ class PyBookImage:
         self.im = self.im.convert('LA').convert('RGBA')
         self.update_dimensions_and_stuff()
 
-    def normalize_y(self, y):
-        if type(y) == tuple:
+    def normalize_y(self, *y):
+        if len(y) == 2:
             return y[0], self.resy - y[1] - 1
-        return self.resy - y - 1
+        if len(y) == 1:
+            return self.resy - y[0] - 1
+        raise Exception(f'Either "y" or "x, y" value expected, but {y} given')
+
+    def fix_color(self, color):
+        if len(color) == 3:
+            return color[0], color[1], color[2], 255
+        if len(color) == 4:
+            return color
+        raise Exception(f'RGB or RGBA color expected, but {len(color)} channel long color given: {color}')
 
     def fill(self, color):
         self.im.paste(color, (0, 0, self.resx, self.resy))
@@ -199,83 +221,54 @@ class PyBookImage:
                         line_img = self.add_point(x, y, (color[0], color[1], color[2], round(color[3] * (1 - distance))), line_img, True)
         self.im.alpha_composite(line_im, (0, 0))
 
+    def draw_quadrant(self, x, y, radius, color, quadrant='tl', keep_middle=True):
+        color = self.fix_color(color)
+        if quadrant == 'tl':
+            sx, sy, ex, ey = x - radius, y, x, y + radius
+        elif quadrant == 'tr':
+            sx, sy, ex, ey = x, y, x + radius, y + radius
+        elif quadrant == 'bl':
+            sx, sy, ex, ey = x - radius, y - radius, x, y
+        elif quadrant == 'br':
+            sx, sy, ex, ey = x, y - radius, x + radius, y
+        else:
+            raise Exception(f'Quadrant can be "tl", "tr", "bl", or "br", but "{quadrant}" given.')
+
+        if not keep_middle:
+            if sx == x:
+                if ex > sx: sx += 1
+                else: sx -= 1
+            if ex == x:
+                if sx > ex: ex += 1
+                else: ex -= 1
+            if sy == y:
+                if ey > sy: sy += 1
+                else: sy -= 1
+            if ey == y:
+                if sy > ey: ey += 1
+                else: ey -= 1
+
+        for x2 in r(sx, ex):
+            for y2 in r(sy, ey):
+                d = ((x2 - x) ** 2 + (y2 - y) ** 2) ** 0.5
+                if d <= radius:
+                    self[x2, y2] = color
+                else:
+                    d -= radius
+                    if d < 1:
+                        self[x2, y2] = color[0], color[1], color[2], round(color[3] * (1 - d))
+
     def draw_rectangle(self, x, y, width, height, color, corner_radius=0):
-        if corner_radius != 0:
-
-            if len(color) == 3:
-                color = color[0], color[1], color[2], 255
-
-            rectangle_im = Image.new('RGBA', (self.resx, self.resy))
-            rectangle_img = rectangle_im.load()
-            d2 = ImageDraw.Draw(rectangle_im)
-
-            d2.rectangle((x, self.normalize_y(y) - height, x + width, self.normalize_y(y)), color)
-
-            # ----------------------------
-            origin = x + corner_radius, y + height - corner_radius
-            for x2 in range(x, x + corner_radius):
-                for y2 in range(y + height - corner_radius + 1, y + height + 1):
-                    distance = ((x2 - origin[0]) ** 2 + (y2 - origin[1]) ** 2) ** 0.5
-
-                    if distance <= corner_radius:
-                        rectangle_img[x2, self.normalize_y(y2)] = color
-                    else:
-                        distance -= corner_radius
-                        if distance < 1:
-                            rectangle_img[x2, self.normalize_y(y2)] = color[0], color[1], color[2], round(color[3] * (1 - distance))
-                        else:
-                            rectangle_img[x2, self.normalize_y(y2)] = 0, 0, 0, 0
-            # ----------------------------
-            origin = x + width - corner_radius, y + height - corner_radius
-            for x2 in range(x + width - corner_radius + 1, x + width):
-                for y2 in range(y + height - corner_radius + 1, y + height + 1):
-                    distance = ((x2 - origin[0]) ** 2 + (y2 - origin[1]) ** 2) ** 0.5
-
-                    if distance <= corner_radius:
-                        print(f'rectangle_img[{x2}, {self.normalize_y(y2)}] = color[0], color[1], color[2], round(color[3] * (1 - distance))')
-                        print(f'x2: {x2} y2: {y2}')
-                        rectangle_img[x2, self.normalize_y(y2)] = color
-                    else:
-                        distance -= corner_radius
-                        if distance < 1:
-                            print(f'rectangle_img[{x2}, {self.normalize_y(y2)}] = color[0], color[1], color[2], round(color[3] * (1 - distance))')
-                            print(f'x2: {x2} y2: {y2}')
-                            rectangle_img[x2, self.normalize_y(y2)] = color[0], color[1], color[2], round(color[3] * (1 - distance))
-                        else:
-                            rectangle_img[x2, self.normalize_y(y2)] = 0, 0, 0, 0
-            # ----------------------------
-            origin = x + corner_radius, y + corner_radius
-            for x2 in range(x, x + corner_radius):
-                for y2 in range(y, y + corner_radius):
-                    distance = ((x2 - origin[0]) ** 2 + (y2 - origin[1]) ** 2) ** 0.5
-
-                    if distance <= corner_radius:
-                        rectangle_img[x2, self.normalize_y(y2)] = color
-                    else:
-                        distance -= corner_radius
-                        if distance < 1:
-                            rectangle_img[x2, self.normalize_y(y2)] = color[0], color[1], color[2], round(color[3] * (1 - distance))
-                        else:
-                            rectangle_img[x2, self.normalize_y(y2)] = 0, 0, 0, 0
-            # ----------------------------
-            origin = x + width - corner_radius, y + corner_radius
-            for x2 in range(x + width - corner_radius + 1, x + width):
-                for y2 in range(y, y + corner_radius):
-                    distance = ((x2 - origin[0]) ** 2 + (y2 - origin[1]) ** 2) ** 0.5
-
-                    if distance <= corner_radius:
-                        rectangle_img[x2, self.normalize_y(y2)] = color
-                    else:
-                        distance -= corner_radius
-                        if distance < 1:
-                            rectangle_img[x2, self.normalize_y(y2)] = color[0], color[1], color[2], round(color[3] * (1 - distance))
-                        else:
-                            print(f'rrrrrrrrrrectangle_img[{x2}, {self.normalize_y(y2)}] = color[0], color[1], color[2], round(color[3] * (1 - distance))')
-                            print(f'x2: {x2} y2: {y2}')
-                            rectangle_img[x2, self.normalize_y(y2)] = 0, 0, 0, 0
-            # ----------------------------
-
-            self.im.alpha_composite(rectangle_im)
+        if corner_radius == 0:
+            self.d.rectangle((self.normalize_y(x, y), self.normalize_y(x + width, y + height)), color)
+        else:
+            self.draw_rectangle(x + corner_radius, y + height - corner_radius, width - corner_radius * 2, corner_radius, color)
+            self.draw_rectangle(x, y + corner_radius, width, height - corner_radius * 2, color)
+            self.draw_rectangle(x + corner_radius, y, width - corner_radius * 2, corner_radius, color)
+            self.draw_quadrant(x + corner_radius, y + height - corner_radius, corner_radius, color, 'tl', False)
+            self.draw_quadrant(x + width - corner_radius, y + height - corner_radius, corner_radius, color, 'tr', False)
+            self.draw_quadrant(x + corner_radius, y + corner_radius, corner_radius, color, 'bl', False)
+            self.draw_quadrant(x + width - corner_radius, y + corner_radius, corner_radius, color, 'br', False)
 
     def draw_lines(self, points, thickness, color, close=False):
         if close:
