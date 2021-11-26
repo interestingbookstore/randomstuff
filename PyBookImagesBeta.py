@@ -1,11 +1,10 @@
 import PIL.Image
 from PIL import Image, ImageDraw, ImageFont
 
-
 # Made by interestingbookstore
 # Github: https://github.com/interestingbookstore/randomstuff
 # -----------------------------------------------------------------------
-# Version released on November 10 2021 - II
+# Version released on November 26 2021
 # ---------------------------------------------------------
 
 
@@ -29,22 +28,27 @@ class PyBookImage:
                 try:
                     if len(extensions) == 0:
                         raise IndexError
-                    self.im = Image.open(params[0] + extensions[0])
+                    self.im = Image.open(params[0] + extensions[0]).convert('RGBA')
                     break
                 except FileNotFoundError:
                     extensions.pop(0)
                 except IndexError:
                     self.im = Image.open(params[0])
-
-            self.resx, self.resy = self.im.size
         else:
             if len(params) == 2:
                 params = params[0], params[1], (0, 0, 0, 0)
             width, height, background = params
-            self.resx, self.resy = width, height
-            self.im = Image.new('RGBA', (width, height), background).convert('RGBA')
+            self.im = Image.new('RGBA', (width, height), background)
         self.img = self.im.load()
         self.d = ImageDraw.Draw(self.im)
+        self.resx, self.resy = self.im.size
+        self.width, self.height = self.resx, self.resy
+        self.size = self.width, self.height
+
+    def update_dimensions_and_stuff(self):
+        self.img = self.im.load()
+        self.d = ImageDraw.Draw(self.im)
+        self.resx, self.resy = self.im.size
         self.width, self.height = self.resx, self.resy
         self.size = self.width, self.height
 
@@ -52,7 +56,17 @@ class PyBookImage:
         return self.img[item[0], self.normalize_y(item[1])]
 
     def __setitem__(self, key, value, blend=False):
-        self.add_point(key[0], key[1], value, set=not blend)
+        x, y = key[0], self.normalize_y(key[1])
+        if len(value) == 3:
+            nc = value
+            nt = 1
+        else:
+            nc = value[:3]
+            nt = value[3] / 255
+        oc, ot = self.img[x, y][:3], self.img[x, y][3]
+        nc2 = nc[0] * nt + oc[0] * (255 - nt), nc[1] * nt + oc[1] * (255 - nt), nc[2] * nt + oc[2] * (255 - nt), (ot + nt) * 255
+        nc2 = tuple(255 if round(i) > 255 else round(i) for i in nc2)
+        self.img[x, y] = nc2
 
     def show(self):
         self.im.show()
@@ -67,15 +81,15 @@ class PyBookImage:
             else:
                 width, height = width
         self.im = self.im.resize((width, height), interpolation_dict[interpolation])
+        self.update_dimensions_and_stuff()
 
-    def make_rgb(self):
+    def remove_transparency(self):
         self.im = self.im.convert('RGB').convert('RGBA')
+        self.update_dimensions_and_stuff()
 
-    def make_bw(self, alpha=True):
-        if alpha:
-            self.im = self.im.convert('LA').convert('RGBA')
-        else:
-            self.im = self.im.convert('L').convert('RGBA')
+    def make_bw(self):
+        self.im = self.im.convert('LA').convert('RGBA')
+        self.update_dimensions_and_stuff()
 
     def normalize_y(self, y):
         if type(y) == tuple:
@@ -86,6 +100,7 @@ class PyBookImage:
         self.im.paste(color, (0, 0, self.resx, self.resy))
 
     def add_point(self, x, y, color, image=None, set=False):
+        # DEPRECATED: USE __setitem__
         if image is None:
             image = self.img
 
@@ -394,3 +409,6 @@ class PyBookImage:
         if '.' not in path:  # It's lazy, and not perfect, I'll get back to it.
             path += '.png'
         self.im.save(path)
+
+    def save_show(self):
+        self.im.save('AAAAA.png')
