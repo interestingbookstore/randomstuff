@@ -3,11 +3,12 @@ import pygame.freetype
 from PIL import Image, ImageFilter, ImageDraw
 from platform import system
 import copy
+from PyBookImages import *
 
 # Made by interestingbookstore
 # Github: https://github.com/interestingbookstore/randomstuff
 # -----------------------------------------------------------------------
-# Version released on November 25 2021
+# Version released on November 26 2021
 # ---------------------------------------------------------
 
 
@@ -23,11 +24,17 @@ draw = ImageDraw.Draw(drop_shadow_high_res)
 draw.rectangle((200, 200, 600, 600), (0, 0, 0))
 drop_shadow_high_res = drop_shadow_high_res.filter(ImageFilter.GaussianBlur(100))
 drop_shadow_high_res = drop_shadow_high_res.crop((600, 0, 800, 200))
+
+
 # ---------------------------------------------------------------------------------------------
 
 def image_stuff(image, scale=1):
     if type(image) == pygame.Surface:
         return image
+
+    if isinstance(image, PyBookImage):
+        image.scale(scale)
+        return pygame.image.fromstring(image.to_bytes(), image.size, 'RGBA')
 
     if type(image) == str:
         image = Image.open(image).convert()
@@ -213,7 +220,7 @@ class Sprite:
 
         self._update_area = True
 
-    def _update(self):
+    def _update(self, game):
         self.current_speed = (self.velocity[0] ** 2 + self.velocity[1] ** 2) ** 0.5
         self.x += self.velocity[0]
         self.y += self.velocity[1]
@@ -299,7 +306,7 @@ class Text:
 
         self._update_area = True
 
-    def _update(self):
+    def _update(self, game):
         if self.text != self._old_text:
             self._font2 = pygame.freetype.Font(self.font, self.size)
             self._font_surf, self._rect = self._font2.render(str(self.text), self.color, size=self.size)
@@ -349,6 +356,59 @@ class Text:
             self._update_area = False
 
 
+class Button:
+    def __init__(self, x, y, width, height, text, font, font_size, text_color, color, corner_radius=0):
+        self.x, self.y, self.width, self.height, self.text, self.font, self.font_size, self.text_color, self.color, self.corner_radius = x, y, width, height, text, font, font_size, text_color, color, corner_radius
+        self._image = PyBookImage(width, height)
+        self._image.draw_rectangle(0, 0, width, height, color, corner_radius)
+        self._sprite_object = Sprite(self._image, x, y)
+        self._text_object = Text(self.text, self.font, self.font_size, self.text_color, self.x + self.width // 2, self.y + self.height // 2, 'center')
+
+        self._update_area = True
+
+        self._previous_state = 'none'
+        self._state = 'none'
+        self.pressed = False
+        self._colors = color, tuple([i + 50 for i in color]), tuple([i - 40 for i in color])
+
+    def _update(self, game):
+        self.pressed = False
+        if self._state != self._previous_state:
+            self._image.fill((0, 0, 0, 0))
+            if self._state == 'none':
+                game.force_mouse_cursor_to_hand = False
+                self._image.draw_rectangle(0, 0, self.width, self.height, self._colors[0], self.corner_radius)
+            elif self._state == 'hover':
+                game.force_mouse_cursor_to_hand = True
+                self._image.draw_rectangle(0, 0, self.width, self.height, self._colors[1], self.corner_radius)
+            elif self._state == 'pressed':
+                self._image.draw_rectangle(0, 0, self.width, self.height, self._colors[2], self.corner_radius)
+        self._previous_state = self._state
+        self._sprite_object._update(game)
+        self._text_object._update(game)
+        if self._sprite_object._update_area or self._text_object._update_area:
+            self._update_area = True
+
+        if rectangle_distance((self._sprite_object.x + self.width // 2, self._sprite_object.y + self.height // 2), game.mouse_position, (self.width // 2, self.height // 2)):
+            self._state = 'hover'
+        else:
+            self._state = 'none'
+        if self._state == 'hover' and game.is_pressed('left'):
+            self._state = 'pressed'
+        if self._state == 'pressed' and game.just_released('left'):
+            self.pressed = True
+            self._state = 'hover'
+
+    def _draw(self, game):
+        self._sprite_object._draw(game)
+        self._text_object._draw(game)
+
+    def _update_screen(self, game, erase=False):
+        self._sprite_object._update_screen(game, erase)
+        self._text_object._update_screen(game, erase)
+        self._update_area = False
+
+
 class Game:
     def __init__(self, viewport_resolution, title='Untitled Game', icon=None, frame=True, fps=60, resolution=(3840, 2160)):
         self.current_scene = None
@@ -362,6 +422,8 @@ class Game:
         self.frame = frame
         self.scale = viewport_resolution[0] / resolution[0]
         self.mouse_cursor = 'normal'
+        self.force_mouse_cursor_to_hand = False
+        self._non_forced_cursor = self.mouse_cursor
         self._old_cursor = 'normal'
 
         self.os = system().lower()
@@ -482,14 +544,19 @@ class Game:
             if self.title != self._title:
                 pygame.display.set_caption(self.title)
 
-            if self.mouse_cursor != self._old_cursor:
-                if self.mouse_cursor == 'normal':
-                    pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
-                elif self.mouse_cursor == 'hand':
+            if self.force_mouse_cursor_to_hand:
+                if self.mouse_cursor != 'hand':
                     pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
-                else:
-                    raise Exception(f'Mouse cursor options are "normal" or "hand", but {self.mouse_cursor} was given.')
-                self._old_cursor = self.mouse_cursor
+                    self._old_cursor = 'hand'
+            else:
+                if self.mouse_cursor != self._old_cursor:
+                    if self.mouse_cursor == 'normal':
+                        pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+                    elif self.mouse_cursor == 'hand':
+                        pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
+                    else:
+                        raise Exception(f'Mouse cursor options are "normal" or "hand", but {self.mouse_cursor} was given.')
+                    self._old_cursor = self.mouse_cursor
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -683,7 +750,7 @@ class Game:
                 self._update_loop()
 
             for i in self._stuff:
-                i._update()
+                i._update(self._game)
 
             draw_all = False
 
