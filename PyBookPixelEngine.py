@@ -1,13 +1,14 @@
 import numpy
 import pygame
 import math
+from PyBookImages import *
 
 
 
 # Made by interestingbookstore
 # Github: https://github.com/interestingbookstore/randomstuff
 # -----------------------------------------------------------------------
-# Version released on November 10 2021
+# Version released on December 31 2021
 # ---------------------------------------------------------
 
 
@@ -26,6 +27,20 @@ scaling = 1  # NOT IMPLEMENTED
 _clock = pygame.time.Clock()
 _delta = 0
 DEBUG_FPS = False
+custom_update_rects = False
+update_rects = []
+
+
+def image_stuff(image):
+    if type(image) == pygame.Surface:
+        return image
+
+    if isinstance(image, PyBookImage):
+        return pygame.image.fromstring(image.to_bytes(), image.size, 'RGBA').convert_alpha()
+
+    if type(image) == str:
+        image = Image.open(image)
+    return pygame.image.fromstring(image.convert('RGBA').tobytes('raw', 'RGBA'), image.size, 'RGBA').convert_alpha()
 
 
 def update_loop(function):
@@ -33,22 +48,27 @@ def update_loop(function):
     _update_loop = function
 
 
-def init_screen(resx, resy):
+def init_screen(resx, resy=None):
     global _screen, _pixels, xres, yres
+    if resy is None:
+        resx, resy = resx
     xres, yres = resx, resy
     _screen = pygame.display.set_mode((resx, resy))
     _pixels = numpy.zeros((xres, yres, 3))
 
 
-def set_pixel(x, y, color):
-    global _pixels
-    # for channel in range(3):
-    #     _pixels[x, yres - y - 1, channel] = color[channel]
+def draw_image(image, x, y):
+    image = image_stuff(image)
+    _screen.blit(image, (x, yres - y - image.get_height()))  # For some reason you don't need to subtract 1 from the y? IDK, I'm tired, whatever.
 
+
+def set_pixel(x, y, color):
     x, y = round(x), round(y)
+    if len(color) == 3:
+        color = color[0], color[1], color[2], 255
 
     if 0 <= x < xres and 0 <= y < yres:
-        if len(color) == 4:
+        if color[3] != 255:
             o = color[3] / 255
             color = color[:3]
             old_color = _pixels[x, y]
@@ -59,11 +79,57 @@ def set_pixel(x, y, color):
                 _pixels[x, yres - y - 1, channel] = color[channel]
 
 
-def fill(color):
-    global _pixels
-
+def fill(color, color2=None, color3=None):
+    if ((color2 is None) or (color3 is None)) and (color2 != color3):
+        raise Exception('Either one or all three of the parameters are required')
+    if color2 is not None:
+        color = color, color2, color3
     for channel in range(3):
         _pixels[:, :, channel] = color[channel]
+
+
+def update_screen(x, y, width, height):
+    update_rects.append((x, y, width, height))
+
+
+class TwoDimensionalList:
+    def __init__(self, single_list, width):
+        self.stuff = single_list
+        self.width = width
+        self.height = len(single_list) // self.width
+        self.fancy_list = []
+        fancy_buffer = []
+        for i in self.stuff:
+            fancy_buffer.append(i)
+            if len(fancy_buffer) == self.width:
+                self.fancy_list.append(fancy_buffer.copy())
+                fancy_buffer.clear()
+        if fancy_buffer:
+            self.fancy_list.append(fancy_buffer)
+        self.coords = []
+        for index, _ in enumerate(self.stuff):
+            self.coords.append((index % self.width, index // self.width))
+
+    def check(self, index):
+        if type(index) == list or type(index) == tuple:
+            return index[0] + index[1] * self.width, index
+        return index, (index % self.width, index // self.width)
+
+    def __contains__(self, item):
+        if self.check(item)[0] < len(self.stuff):
+            return True
+        return False
+
+    def __getitem__(self, item):
+        return self.stuff[self.check(item)[0]]
+
+    def __setitem__(self, key, value):
+        keys = self.check(key)
+        self.stuff[keys[0]] = value
+        self.fancy_list[keys[1][1]][keys[1][0]] = value
+
+    def __repr__(self):
+        return str('\n'.join(reversed([str(i) for i in self.fancy_list])))
 
 
 input_downs = []  # Keys that were just now pressed
@@ -73,7 +139,7 @@ mouse_position = [0, 0]  # variables are weird; if I make this an immutable tupl
 
 
 def run_game():
-    global _run, _delta
+    global _run, _delta, custom_update_rects
     _run = True
     try:
         while _run:
@@ -128,14 +194,24 @@ def run_game():
 
             pixels = pygame.surfarray.pixels3d(_screen)
             for channel in range(3):
-                # interp = NearestNDInterpolator((_pixels[:, :, channel]))
-                # pixels2 = numpy.array(Image.fromarray(_pixels).resize(xres * scaling, yres * scaling, Image.NEAREST))
                 pixels[:, :, channel] = _pixels[:, :, channel]
             del pixels
 
-            _update_loop()
+            try:
+                _update_loop(_delta)
+            except TypeError:
+                _update_loop()
 
-            pygame.display.flip()
+            if update_rects or custom_update_rects:
+                if not custom_update_rects:
+                    custom_update_rects = True
+
+                for (x, y, width, height) in update_rects:
+                    pygame.display.update(x, yres - y - 1 - height, width, height)
+
+                update_rects.clear()
+            else:
+                pygame.display.flip()
             _delta += _clock.tick()
             if _delta >= 1000:
                 _delta = 0
@@ -156,7 +232,7 @@ def just_pressed(*keys, type='and'):
             if key in input_downs:
                 return True
         return False
-    raise Exception(f'"type" can be "and" (meaning all of the keys must be pressed down) or "or" (meaning at least one key must be pressed down), but "{type}" given.')
+    raise Exception(f'"type" can be "and" (meaning all of the keys must be pressed down) or "or" (meaning at least one key must be pressed down), but "{type}" was given.')
 
 
 def just_released(*keys, type='and'):
@@ -170,7 +246,21 @@ def just_released(*keys, type='and'):
             if key in input_ups:
                 return True
         return False
-    raise Exception(f'"type" can be "and" (meaning all of the keys must be released) or "or" (meaning at least one key must be released), but "{type}" given.')
+    raise Exception(f'"type" can be "and" (meaning all of the keys must be released) or "or" (meaning at least one key must be released), but "{type}" was given.')
+
+
+def just_interacted(*keys, type='and'):
+    if type == 'and':
+        for key in keys:
+            if key not in (input_ups or input_downs):
+                return False
+        return True
+    elif type == 'or':
+        for key in keys:
+            if key in (input_ups or input_downs):
+                return True
+        return False
+    raise Exception(f'"type" can be "and" (meaning all of the keys must be released) or "or" (meaning at least one key must be released), but "{type}" was given.')
 
 
 def is_pressed(*keys, type='and'):
@@ -428,12 +518,9 @@ def draw_line(start, end, thickness, color):
 
 
 def draw_rectangle(x, y, width, height, color):
-    if len(color) == 3:
-        color = color[0], color[1], color[2], 255
-
-    for x in range(x, x + width):
-        for y in range(y, y + height):
-            set_pixel(x, y, color)
+    for x2 in range(x, x + width):
+        for y2 in range(y, y + height):
+            set_pixel(x2, y2, color)
 
 
 def draw_circle(origin, radius, fill):
